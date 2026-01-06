@@ -24,8 +24,10 @@ interface OrderNodeData {
   groupId?: string | null
   groupIndex?: number // Grup içi sıra (1, 2, 3...)
   groupSize?: number  // Gruptaki toplam sipariş
+  price?: number      // Sipariş fiyatı
   drivers?: Driver[]
   onDriverSelect?: (orderId: string, driverName: string) => void
+  onPriceChange?: (orderId: string, price: number) => void
 }
 
 // Adresten ZIP kodunu çıkar ve vurgula
@@ -119,8 +121,31 @@ function OrderNode({ data, selected }: NodeProps<OrderNodeData>) {
         </div>
       </div>
 
-      {/* Sürücü Seçimi - Arama özellikli */}
-      <div className="mt-2 pt-2 border-t border-black/10">
+      {/* Fiyat ve Sürücü Seçimi */}
+      <div className="mt-2 pt-2 border-t border-black/10 space-y-2">
+        {/* Fiyat Girişi */}
+        <div className="flex items-center gap-2">
+          <span className="text-green-600 text-sm">💰</span>
+          <div className="flex items-center flex-1">
+            <span className="text-xs text-gray-600 mr-1">$</span>
+            <input
+              type="number"
+              value={data.price || ''}
+              onChange={(e) => {
+                const value = parseFloat(e.target.value) || 0
+                if (data.onPriceChange) {
+                  data.onPriceChange(data.id, value)
+                }
+              }}
+              placeholder="0.00"
+              className="w-20 text-sm px-2 py-1 border border-gray-300 rounded bg-white focus:outline-none focus:ring-1 focus:ring-green-500"
+              step="0.01"
+              min="0"
+            />
+          </div>
+        </div>
+
+        {/* Sürücü Seçimi */}
         <div className="flex items-center gap-2">
           <span className="text-green-600 text-sm">🚗</span>
           <div className="flex-1">

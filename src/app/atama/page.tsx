@@ -28,6 +28,8 @@ interface Order {
   status: string
   groupId: string | null
   orderDate?: string // ISO date string
+  price?: number          // Sipariş fiyatı ($)
+  groupPrice?: number     // Grup fiyatı
 }
 
 interface OrderGroup {
@@ -471,6 +473,115 @@ export default function AtamaPage() {
     }
   }
 
+  // Sipariş fiyatını güncelle
+  const handlePriceChange = async (orderId: string, price: number) => {
+    // Optimistik güncelleme
+    setOrders(prev =>
+      prev.map(o => (o.id === orderId ? { ...o, price } : o))
+    )
+
+    try {
+      const response = await fetch('/api/orders/price', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          orderId,
+          price,
+          date: selectedDate
+        }),
+      })
+
+      if (!response.ok) {
+        // Hata olursa geri al
+        await fetchData()
+        setMessage({ type: 'error', text: 'Fiyat güncellenemedi' })
+      }
+    } catch (error) {
+      console.error('Price update error:', error)
+    }
+  }
+
+  // Grup fiyatını güncelle
+  const handleGroupPriceChange = async (groupId: string, groupPrice: number) => {
+    // Optimistik güncelleme - gruptaki tüm siparişlerin groupPrice'ını güncelle
+    setOrders(prev =>
+      prev.map(o => (o.groupId === groupId ? { ...o, groupPrice } : o))
+    )
+
+    try {
+      const response = await fetch('/api/orders/group-price', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          groupId,
+          groupPrice,
+          date: selectedDate
+        }),
+      })
+
+      if (!response.ok) {
+        await fetchData()
+        setMessage({ type: 'error', text: 'Grup fiyatı güncellenemedi' })
+      }
+    } catch (error) {
+      console.error('Group price update error:', error)
+    }
+  }
+
+  // Base44'e atamaları gönder
+  const [exporting, setExporting] = useState(false)
+
+  const handleExportToBase44 = async () => {
+    // Sadece atanmış siparişleri filtrele
+    const assignedOrders = orders.filter(o => o.driver)
+
+    if (assignedOrders.length === 0) {
+      setMessage({ type: 'error', text: 'Atanmış sipariş bulunamadı' })
+      setTimeout(() => setMessage(null), 3000)
+      return
+    }
+
+    setExporting(true)
+    try {
+      const assignments = assignedOrders.map(o => ({
+        orderId: o.id,
+        orderNumber: o.orderNumber,
+        driverName: o.driver,
+        groupId: o.groupId,
+        price: o.price || 0,
+        groupPrice: o.groupPrice || 0
+      }))
+
+      const response = await fetch('/api/base44/export', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          date: selectedDate,
+          assignments,
+          triggerSMS: false
+        }),
+      })
+
+      const result = await response.json()
+
+      if (response.ok && result.success) {
+        setMessage({
+          type: 'success',
+          text: `${result.updatedOrders || assignments.length} atama Base44'e gönderildi`
+        })
+      } else {
+        setMessage({ type: 'error', text: result.error || 'Export başarısız' })
+      }
+      setTimeout(() => setMessage(null), 5000)
+    } catch (error) {
+      console.error('Export error:', error)
+      setMessage({ type: 'error', text: 'Base44\'e gönderim başarısız' })
+      setTimeout(() => setMessage(null), 5000)
+    } finally {
+      setExporting(false)
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-[600px]">
@@ -558,6 +669,14 @@ export default function AtamaPage() {
             <Button onClick={() => fetchData(selectedDate || undefined)} variant="outline" className="text-xs py-1.5 px-3">
               ↻ Yenile
             </Button>
+            <Button
+              onClick={handleExportToBase44}
+              disabled={exporting || orders.filter(o => o.driver).length === 0}
+              variant="outline"
+              className="text-xs py-1.5 px-3 bg-green-50 border-green-300 text-green-700 hover:bg-green-100 disabled:opacity-50"
+            >
+              {exporting ? '⏳ Gönderiliyor...' : '📤 Base44\'e Gönder'}
+            </Button>
           </div>
         </div>
 
@@ -628,6 +747,8 @@ export default function AtamaPage() {
         onGroupAssign={handleGroupAssign}
         onRemoveFromGroup={handleRemoveFromGroup}
         onMergeOrders={handleMergeOrders}
+        onPriceChange={handlePriceChange}
+        onGroupPriceChange={handleGroupPriceChange}
       />
     </div>
   )

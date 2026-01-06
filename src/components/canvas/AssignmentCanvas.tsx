@@ -35,6 +35,8 @@ interface Order {
   status: string
   groupId: string | null
   orderDate?: string // ISO date string
+  price?: number          // Sipariş fiyatı ($)
+  groupPrice?: number     // Grup fiyatı
 }
 
 interface OrderGroup {
@@ -59,6 +61,8 @@ interface AssignmentCanvasProps {
   onGroupAssign: (groupId: string, driverId: string) => void
   onRemoveFromGroup?: (orderId: string) => void
   onMergeOrders?: (sourceOrderId: string, targetOrderId: string | null, targetGroupId: string | null) => void
+  onPriceChange?: (orderId: string, price: number) => void
+  onGroupPriceChange?: (groupId: string, groupPrice: number) => void
 }
 
 function AssignmentCanvasInner({
@@ -69,6 +73,8 @@ function AssignmentCanvasInner({
   // onGroupAssign, // Not currently used but kept for future features
   onRemoveFromGroup,
   onMergeOrders,
+  onPriceChange,
+  onGroupPriceChange,
 }: AssignmentCanvasProps) {
   const [nodes, setNodes, onNodesChange] = useNodesState([])
   const [edges, setEdges, onEdgesChange] = useEdgesState([])
@@ -284,10 +290,14 @@ function AssignmentCanvasInner({
             status: o.status,
             driver: o.driver,
             timeSlot: o.timeSlot, // Her sipariş için zaman dilimi
+            price: o.price,
           })),
+          groupPrice: groupOrdersList[0]?.groupPrice,
           drivers: drivers,
           onDriverSelect: onAssign,
           onRemoveFromGroup: onRemoveFromGroup,
+          onPriceChange: onPriceChange,
+          onGroupPriceChange: onGroupPriceChange,
         },
       })
 
@@ -321,8 +331,10 @@ function AssignmentCanvasInner({
           status: order.status,
           driver: order.driver,
           groupId: null,
+          price: order.price,
           drivers: drivers,
           onDriverSelect: onAssign,
+          onPriceChange: onPriceChange,
         },
       })
 
@@ -334,7 +346,7 @@ function AssignmentCanvasInner({
 
     setNodes(newNodes)
     setEdges([])
-  }, [filteredOrders, drivers, setNodes, setEdges, onAssign, onRemoveFromGroup, savedPositions])
+  }, [filteredOrders, drivers, setNodes, setEdges, onAssign, onRemoveFromGroup, onPriceChange, onGroupPriceChange, savedPositions])
 
   // Node değişikliklerini takip et ve pozisyonları kaydet
   const handleNodesChange = useCallback((changes: Parameters<typeof onNodesChange>[0]) => {

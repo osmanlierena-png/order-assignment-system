@@ -6,10 +6,10 @@
 import { Redis } from '@upstash/redis'
 
 // Redis client - Environment variable'lar Vercel'den otomatik gelir
-// STORAGE_ prefix'i Vercel tarafından otomatik eklenir
+// Vercel KV farklı prefix kullanabiliyor: KV_REST_API_*, UPSTASH_REDIS_REST_*, STORAGE_*
 const redis = new Redis({
-  url: process.env.UPSTASH_REDIS_REST_URL || process.env.STORAGE_URL || '',
-  token: process.env.UPSTASH_REDIS_REST_TOKEN || process.env.STORAGE_TOKEN || '',
+  url: process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL || process.env.STORAGE_URL || '',
+  token: process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN || process.env.STORAGE_TOKEN || '',
 })
 
 const STORE_PREFIX = 'canvas:import'
@@ -42,6 +42,8 @@ export interface ImportedOrder {
   driverPhone?: string
   timeSlot?: string
   groupId?: string | null
+  price?: number          // Sipariş fiyatı ($)
+  groupPrice?: number     // Grup fiyatı (grup içindeki ilk siparişte tutulur)
 }
 
 export interface ImportedDriver {
@@ -60,9 +62,10 @@ export interface ImportData {
 
 // Redis bağlantısı var mı kontrol et
 function isRedisConfigured(): boolean {
+  const hasKV = !!(process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN)
   const hasUpstash = !!(process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN)
   const hasStorage = !!(process.env.STORAGE_URL && process.env.STORAGE_TOKEN)
-  return hasUpstash || hasStorage
+  return hasKV || hasUpstash || hasStorage
 }
 
 // Fallback: In-memory store (development için)
@@ -196,4 +199,41 @@ export async function clearImportData(date?: string | Date): Promise<void> {
     }
   }
   memoryStore.delete(dateKey)
+}
+
+// Sipariş fiyatını güncelle
+export async function updateOrderPrice(orderId: string, price: number, date?: string | Date): Promise<boolean> {
+  const dateKey = date ? formatDateKey(date) : await getLatestDate()
+  if (!dateKey) return false
+
+  const data = await getImportData(dateKey)
+  if (!data) return false
+
+  const order = data.orders.find(o => o.id === orderId)
+  if (order) {
+    order.price = price
+    await setImportData(data)
+    return true
+  }
+  return false
+}
+
+// Grup fiyatını güncelle (gruptaki tüm siparişlere aynı groupPrice atanır)
+export async function updateGroupPrice(groupId: string, groupPrice: number, date?: string | Date): Promise<boolean> {
+  const dateKey = date ? formatDateKey(date) : await getLatestDate()
+  if (!dateKey) return false
+
+  const data = await getImportData(dateKey)
+  if (!data) return false
+
+  const groupOrders = data.orders.filter(o => o.groupId === groupId)
+  if (groupOrders.length === 0) return false
+
+  // Gruptaki tüm siparişlere groupPrice ata
+  groupOrders.forEach(order => {
+    order.groupPrice = groupPrice
+  })
+
+  await setImportData(data)
+  return true
 }

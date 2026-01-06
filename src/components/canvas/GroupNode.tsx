@@ -21,15 +21,19 @@ interface OrderInGroup {
   status: string
   driver: string | null
   timeSlot?: string // Her siparişin kendi zaman dilimi
+  price?: number    // Sipariş fiyatı
 }
 
 interface GroupNodeData {
   groupId: string
   timeSlot: string
   orders: OrderInGroup[]
+  groupPrice?: number // Grup toplam fiyatı
   drivers?: Driver[]
   onDriverSelect?: (orderId: string, driverName: string) => void
   onRemoveFromGroup?: (orderId: string) => void
+  onPriceChange?: (orderId: string, price: number) => void
+  onGroupPriceChange?: (groupId: string, groupPrice: number) => void
 }
 
 // Adresten ZIP kodunu çıkar
@@ -262,6 +266,28 @@ function GroupNode({ data }: NodeProps<GroupNodeData>) {
         position={Position.Left}
         className="w-5 h-5 !bg-purple-500 !border-2 !border-white"
       />
+
+      {/* Grup Fiyatı */}
+      <div className="px-3 py-2 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
+        <span className="text-xs font-semibold text-gray-600">Grup Fiyatı:</span>
+        <div className="flex items-center">
+          <span className="text-sm text-gray-600 mr-1">$</span>
+          <input
+            type="number"
+            value={data.groupPrice || ''}
+            onChange={(e) => {
+              const value = parseFloat(e.target.value) || 0
+              if (data.onGroupPriceChange) {
+                data.onGroupPriceChange(data.groupId, value)
+              }
+            }}
+            placeholder="0.00"
+            className="w-24 text-sm px-2 py-1 border border-gray-300 rounded bg-white focus:outline-none focus:ring-1 focus:ring-purple-500 font-bold"
+            step="0.01"
+            min="0"
+          />
+        </div>
+      </div>
 
       {/* Grup içindeki siparişler */}
       <div className="p-2 space-y-2">
