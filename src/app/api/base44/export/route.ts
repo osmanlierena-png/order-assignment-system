@@ -103,51 +103,59 @@ export async function POST(request: NextRequest) {
       }, { headers: corsHeaders })
     }
 
-    // Base44'e gönderim yap
+    // Base44 Entity API ile gönderim yap
+    // Her sipariş için ayrı PUT request yapılır
     try {
-      const response = await fetch(`${base44ApiUrl}/functions/updateOrdersFromCanvas`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          // Base44 API key - görseldeki formata göre
-          ...(process.env.BASE44_API_TOKEN && {
-            'api_key': process.env.BASE44_API_TOKEN
-          })
-        },
-        body: JSON.stringify({
-          date,
-          assignments: assignments.map(a => ({
-            orderId: a.orderId,
-            orderNumber: a.orderNumber,
-            driverId: a.driverId,      // Tekil tanımlayıcı (önerilen)
-            driverName: a.driverName,  // Geriye uyumluluk için
-            groupId: a.groupId,
-            price: a.price,
-            groupPrice: a.groupPrice
-          })),
-          triggerSMS
-        })
-      })
-
-      if (!response.ok) {
-        const errorText = await response.text()
-        console.error('[BASE44 EXPORT] Base44 API hatası:', errorText)
-        return NextResponse.json({
-          success: false,
-          error: `Base44 API hatası: ${response.status}`,
-          details: errorText
-        }, { status: 500, headers: corsHeaders })
+      const results = {
+        success: 0,
+        failed: 0,
+        errors: [] as string[]
       }
 
-      const result = await response.json()
-      console.log('[BASE44 EXPORT] Base44 yanıtı:', result)
+      // Her atama için Base44'e PUT request
+      for (const assignment of assignments) {
+        try {
+          const response = await fetch(
+            `${base44ApiUrl}/entities/DailyOrder/${assignment.orderId}`,
+            {
+              method: 'PUT',
+              headers: {
+                'Content-Type': 'application/json',
+                'api_key': process.env.BASE44_API_TOKEN || ''
+              },
+              body: JSON.stringify({
+                driver_name: assignment.driverName,
+                canvas_price: assignment.price,
+                canvas_group_id: assignment.groupId,
+                status: 'Atandı'
+              })
+            }
+          )
+
+          if (response.ok) {
+            results.success++
+            console.log(`[BASE44 EXPORT] ✓ Order ${assignment.orderNumber} güncellendi`)
+          } else {
+            results.failed++
+            const errorText = await response.text()
+            results.errors.push(`${assignment.orderNumber}: ${response.status} - ${errorText}`)
+            console.error(`[BASE44 EXPORT] ✗ Order ${assignment.orderNumber} hata:`, errorText)
+          }
+        } catch (orderError) {
+          results.failed++
+          results.errors.push(`${assignment.orderNumber}: ${orderError instanceof Error ? orderError.message : 'Bilinmeyen hata'}`)
+        }
+      }
+
+      console.log(`[BASE44 EXPORT] Sonuç: ${results.success} başarılı, ${results.failed} başarısız`)
 
       return NextResponse.json({
-        success: true,
-        message: `${assignments.length} atama Base44'e gönderildi`,
-        updatedOrders: assignments.length,
-        smsTriggered: triggerSMS,
-        base44Response: result
+        success: results.failed === 0,
+        message: `${results.success}/${assignments.length} atama Base44'e gönderildi`,
+        updatedOrders: results.success,
+        failedOrders: results.failed,
+        errors: results.errors.length > 0 ? results.errors : undefined,
+        smsTriggered: false // SMS için ayrı mekanizma gerekli
       }, { headers: corsHeaders })
 
     } catch (fetchError) {
