@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState, useMemo } from 'react'
+import { useCallback, useEffect, useState, useMemo, useRef } from 'react'
 import ReactFlow, {
   Node,
   Controls,
@@ -37,6 +37,9 @@ interface Order {
   orderDate?: string // ISO date string
   price?: number          // Sipariş fiyatı ($)
   groupPrice?: number     // Grup fiyatı
+  driverResponse?: 'ACCEPTED' | 'REJECTED' | null  // Sürücü yanıtı
+  driverResponseTime?: string                       // Yanıt zamanı
+  smsSent?: boolean                                  // SMS gönderildi mi?
 }
 
 interface OrderGroup {
@@ -57,6 +60,7 @@ interface AssignmentCanvasProps {
   orders: Order[]
   groups: OrderGroup[]
   drivers: Driver[]
+  selectedDate?: string | null  // Pozisyon kaydetme için tarih
   onAssign: (orderId: string, driverId: string) => void
   onGroupAssign: (groupId: string, driverId: string) => void
   onRemoveFromGroup?: (orderId: string) => void
@@ -69,6 +73,7 @@ function AssignmentCanvasInner({
   orders,
   // groups, // Not currently used but kept for future features
   drivers,
+  selectedDate,
   onAssign,
   // onGroupAssign, // Not currently used but kept for future features
   onRemoveFromGroup,
@@ -81,15 +86,75 @@ function AssignmentCanvasInner({
 
   // Node pozisyonlarını kaydet (birleştirme sonrası korunsun)
   const [savedPositions, setSavedPositions] = useState<Record<string, { x: number; y: number }>>({})
+  const [positionsLoaded, setPositionsLoaded] = useState(false)
+  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   // Filtreler
   const [dateFilter, setDateFilter] = useState<string>('ALL')
   const [timeSlotFilter, setTimeSlotFilter] = useState<string>('ALL')
   const [statusFilter, setStatusFilter] = useState<string>('ALL')
   const [groupFilter, setGroupFilter] = useState<string>('ALL') // ALL, GROUPED, UNGROUPED, MIXED
+  const [responseFilter, setResponseFilter] = useState<string>('ALL') // ALL, PENDING_RESPONSE, ACCEPTED, REJECTED
+  const [assignmentFilter, setAssignmentFilter] = useState<string>('UNASSIGNED') // UNASSIGNED (varsayılan), ASSIGNED, ALL
 
   // useReactFlow hook - güncel node'ları almak için
   const { getNodes, fitView } = useReactFlow()
+
+  // Sayfa yüklendiğinde pozisyonları Redis'ten al
+  useEffect(() => {
+    const loadPositions = async () => {
+      if (!selectedDate) return
+
+      try {
+        const response = await fetch(`/api/positions?date=${selectedDate}`)
+        const data = await response.json()
+
+        if (data.success && data.positions && Object.keys(data.positions).length > 0) {
+          setSavedPositions(data.positions)
+          console.log(`[CANVAS] ${data.count} pozisyon Redis'ten yüklendi`)
+        }
+      } catch (error) {
+        console.error('[CANVAS] Pozisyon yükleme hatası:', error)
+      } finally {
+        setPositionsLoaded(true)
+      }
+    }
+
+    loadPositions()
+  }, [selectedDate])
+
+  // Pozisyonları Redis'e kaydet (debounced)
+  const savePositionsToRedis = useCallback((positions: Record<string, { x: number; y: number }>) => {
+    if (!selectedDate) return
+
+    // Mevcut timeout'u temizle
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current)
+    }
+
+    // 2 saniye sonra kaydet (debounce)
+    saveTimeoutRef.current = setTimeout(async () => {
+      try {
+        await fetch('/api/positions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ positions, date: selectedDate })
+        })
+        console.log(`[CANVAS] ${Object.keys(positions).length} pozisyon Redis'e kaydedildi`)
+      } catch (error) {
+        console.error('[CANVAS] Pozisyon kaydetme hatası:', error)
+      }
+    }, 2000)
+  }, [selectedDate])
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current)
+      }
+    }
+  }, [])
 
   // Benzersiz tarihleri çıkar (dropdown için)
   const availableDates = useMemo(() => {
@@ -140,6 +205,17 @@ function AssignmentCanvasInner({
     return mixedIds
   }, [orders])
 
+  // Siparişin atanmış olup olmadığını kontrol et (grup içindeyse grubun atanmış olması yeterli)
+  const isOrderAssigned = useCallback((order: Order, allOrders: Order[]): boolean => {
+    // Sipariş tekil ise kendi driver'ına bak
+    if (!order.groupId) {
+      return !!order.driver
+    }
+    // Sipariş grupta ise, gruptaki herhangi bir siparişe driver atanmış mı bak
+    const groupOrders = allOrders.filter(o => o.groupId === order.groupId)
+    return groupOrders.some(o => !!o.driver)
+  }, [])
+
   // Filtrelenmiş siparişler - useMemo ile memoize et
   const filteredOrders = useMemo(() => {
     return orders.filter(order => {
@@ -157,9 +233,26 @@ function AssignmentCanvasInner({
         if (!order.groupId) return false
         if (!mixedGroupIds.has(order.groupId)) return false
       }
+      // Sürücü yanıt filtresi
+      if (responseFilter !== 'ALL') {
+        if (responseFilter === 'PENDING_RESPONSE') {
+          // Atanmış ama yanıt bekleyen
+          if (!order.driver || order.driverResponse) return false
+        } else if (responseFilter === 'ACCEPTED') {
+          if (order.driverResponse !== 'ACCEPTED') return false
+        } else if (responseFilter === 'REJECTED') {
+          if (order.driverResponse !== 'REJECTED') return false
+        }
+      }
+      // Atama durumu filtresi (varsayılan: UNASSIGNED - atanmamışları göster)
+      if (assignmentFilter !== 'ALL') {
+        const assigned = isOrderAssigned(order, orders)
+        if (assignmentFilter === 'UNASSIGNED' && assigned) return false
+        if (assignmentFilter === 'ASSIGNED' && !assigned) return false
+      }
       return true
     })
-  }, [orders, dateFilter, timeSlotFilter, statusFilter, groupFilter, mixedGroupIds])
+  }, [orders, dateFilter, timeSlotFilter, statusFilter, groupFilter, mixedGroupIds, responseFilter, assignmentFilter, isOrderAssigned])
 
   // Node'ları oluştur
   useEffect(() => {
@@ -291,6 +384,9 @@ function AssignmentCanvasInner({
             driver: o.driver,
             timeSlot: o.timeSlot, // Her sipariş için zaman dilimi
             price: o.price,
+            driverResponse: o.driverResponse,      // Sürücü yanıtı
+            driverResponseTime: o.driverResponseTime,
+            smsSent: o.smsSent,                    // SMS gönderildi mi?
           })),
           groupPrice: groupOrdersList[0]?.groupPrice,
           drivers: drivers,
@@ -332,6 +428,9 @@ function AssignmentCanvasInner({
           driver: order.driver,
           groupId: null,
           price: order.price,
+          driverResponse: order.driverResponse,      // Sürücü yanıtı
+          driverResponseTime: order.driverResponseTime,
+          smsSent: order.smsSent,                    // SMS gönderildi mi?
           drivers: drivers,
           onDriverSelect: onAssign,
           onPriceChange: onPriceChange,
@@ -353,16 +452,23 @@ function AssignmentCanvasInner({
     onNodesChange(changes)
 
     // Pozisyon değişikliklerini kaydet
+    let hasPositionChange = false
     changes.forEach(change => {
       if (change.type === 'position' && change.position && !change.dragging) {
         // Sadece sürükleme bittiğinde kaydet
-        setSavedPositions(prev => ({
-          ...prev,
-          [change.id]: { x: change.position!.x, y: change.position!.y }
-        }))
+        setSavedPositions(prev => {
+          const newPositions = {
+            ...prev,
+            [change.id]: { x: change.position!.x, y: change.position!.y }
+          }
+          // Redis'e kaydet (debounced)
+          savePositionsToRedis(newPositions)
+          return newPositions
+        })
+        hasPositionChange = true
       }
     })
-  }, [onNodesChange])
+  }, [onNodesChange, savePositionsToRedis])
 
   // onConnect artık kullanılmıyor - sürücü ataması dropdown ile yapılıyor
   const onConnect = useCallback(
@@ -378,10 +484,15 @@ function AssignmentCanvasInner({
       if (!draggedNode || !draggedNode.position) return
 
       // Her durumda pozisyonu kaydet
-      setSavedPositions(prev => ({
-        ...prev,
-        [draggedNode.id]: { x: draggedNode.position.x, y: draggedNode.position.y }
-      }))
+      setSavedPositions(prev => {
+        const newPositions = {
+          ...prev,
+          [draggedNode.id]: { x: draggedNode.position.x, y: draggedNode.position.y }
+        }
+        // Redis'e kaydet (debounced)
+        savePositionsToRedis(newPositions)
+        return newPositions
+      })
 
       // Sadece order node'ları için birleştirme işlemi yap (grupsuz siparişler)
       if (!draggedNode.id.startsWith('order-')) return
@@ -445,11 +556,45 @@ function AssignmentCanvasInner({
 
       // Çakışma yok - node'un pozisyonu zaten kaydedildi
     },
-    [onMergeOrders, getNodes]
+    [onMergeOrders, getNodes, savePositionsToRedis]
   )
 
   // İstatistikler
   const groupCount = [...new Set(orders.filter(o => o.groupId).map(o => o.groupId))].length
+
+  // Atanmış/atanmamış sipariş sayısı (grup bazlı - grupta biri atanmışsa tüm grup atanmış sayılır)
+  const assignmentStats = useMemo(() => {
+    const processedGroupIds = new Set<string>()
+    let assigned = 0
+    let unassigned = 0
+
+    orders.forEach(order => {
+      if (order.groupId) {
+        // Grup zaten işlendiyse atla
+        if (processedGroupIds.has(order.groupId)) return
+        processedGroupIds.add(order.groupId)
+
+        // Gruptaki siparişleri kontrol et
+        const groupOrders = orders.filter(o => o.groupId === order.groupId)
+        const isGroupAssigned = groupOrders.some(o => !!o.driver)
+
+        if (isGroupAssigned) {
+          assigned += groupOrders.length
+        } else {
+          unassigned += groupOrders.length
+        }
+      } else {
+        // Tekil sipariş
+        if (order.driver) {
+          assigned++
+        } else {
+          unassigned++
+        }
+      }
+    })
+
+    return { assigned, unassigned }
+  }, [orders])
 
   return (
     <div className="w-full h-[calc(100vh-120px)] min-h-[600px] bg-gray-50 rounded-xl border border-gray-200 shadow-lg">
@@ -529,18 +674,52 @@ function AssignmentCanvasInner({
             <option value="ALL">Tüm Durumlar</option>
             <option value="PENDING">⏳ Beklemede</option>
             <option value="ASSIGNED">✅ Atandı</option>
+            <option value="CONFIRMED">🎉 Onaylandı</option>
             <option value="IN_TRANSIT">🚗 Yolda</option>
             <option value="DELIVERED">📦 Teslim</option>
           </select>
 
+          {/* Sürücü Yanıt Filtresi */}
+          <select
+            value={responseFilter}
+            onChange={(e) => setResponseFilter(e.target.value)}
+            className="bg-purple-50 border-2 border-purple-300 rounded-lg px-3 py-1.5 text-xs shadow-sm focus:outline-none focus:ring-2 focus:ring-purple-500 font-semibold text-purple-800"
+          >
+            <option value="ALL">Tüm Yanıtlar</option>
+            <option value="PENDING_RESPONSE">⏳ Yanıt Bekliyor</option>
+            <option value="ACCEPTED">✅ Onayladı</option>
+            <option value="REJECTED">❌ Reddetti</option>
+          </select>
+
+          <span className="text-gray-300">|</span>
+
+          {/* Atama Durumu Filtresi - YENİ */}
+          <select
+            value={assignmentFilter}
+            onChange={(e) => setAssignmentFilter(e.target.value)}
+            className={`border-2 rounded-lg px-3 py-1.5 text-xs shadow-sm focus:outline-none focus:ring-2 font-semibold ${
+              assignmentFilter === 'UNASSIGNED'
+                ? 'bg-orange-50 border-orange-400 text-orange-800 focus:ring-orange-500'
+                : assignmentFilter === 'ASSIGNED'
+                ? 'bg-emerald-50 border-emerald-400 text-emerald-800 focus:ring-emerald-500'
+                : 'bg-gray-50 border-gray-300 text-gray-800 focus:ring-gray-500'
+            }`}
+          >
+            <option value="UNASSIGNED">📋 Atanmamış</option>
+            <option value="ASSIGNED">✅ Atanmış</option>
+            <option value="ALL">🔄 Tümü</option>
+          </select>
+
           {/* Filtre aktif göstergesi */}
-          {(dateFilter !== 'ALL' || timeSlotFilter !== 'ALL' || statusFilter !== 'ALL' || groupFilter !== 'ALL') && (
+          {(dateFilter !== 'ALL' || timeSlotFilter !== 'ALL' || statusFilter !== 'ALL' || groupFilter !== 'ALL' || responseFilter !== 'ALL' || assignmentFilter !== 'UNASSIGNED') && (
             <button
               onClick={() => {
                 setDateFilter('ALL')
                 setTimeSlotFilter('ALL')
                 setStatusFilter('ALL')
                 setGroupFilter('ALL')
+                setResponseFilter('ALL')
+                setAssignmentFilter('UNASSIGNED')
               }}
               className="bg-red-100 text-red-600 px-2 py-1 rounded text-xs hover:bg-red-200"
             >
@@ -556,7 +735,11 @@ function AssignmentCanvasInner({
           </span>
           <span className="text-gray-400">|</span>
           <span className="text-gray-600">
-            <b className="text-green-600">{drivers.length}</b> sürücü
+            <b className="text-orange-600">{assignmentStats.unassigned}</b> atanmamış
+          </span>
+          <span className="text-gray-400">|</span>
+          <span className="text-gray-600">
+            <b className="text-emerald-600">{assignmentStats.assigned}</b> atanmış
           </span>
           <span className="text-gray-400">|</span>
           <span className="text-gray-600">

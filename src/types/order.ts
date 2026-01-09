@@ -2,7 +2,10 @@
 export type TimeSlot = 'MORNING' | 'AFTERNOON' | 'EVENING'
 
 // Sipariş durumları
-export type OrderStatus = 'PENDING' | 'ASSIGNED' | 'IN_TRANSIT' | 'DELIVERED' | 'CANCELLED'
+export type OrderStatus = 'PENDING' | 'ASSIGNED' | 'CONFIRMED' | 'IN_TRANSIT' | 'DELIVERED' | 'CANCELLED'
+
+// Sürücü yanıt durumları
+export type DriverResponse = 'ACCEPTED' | 'REJECTED' | null
 
 // Sipariş tipi
 export interface Order {

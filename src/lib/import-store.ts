@@ -38,12 +38,19 @@ export interface ImportedOrder {
   dropoffLng?: number
   status?: string
   customerName?: string
-  driverName?: string
+  driverId?: string       // Sürücü ID (tekil tanımlayıcı - önerilen)
+  driverName?: string     // Sürücü adı (geriye uyumluluk)
   driverPhone?: string
   timeSlot?: string
   groupId?: string | null
   price?: number          // Sipariş fiyatı ($)
   groupPrice?: number     // Grup fiyatı (grup içindeki ilk siparişte tutulur)
+  // Sürücü Yanıt Bilgileri
+  driverResponse?: 'ACCEPTED' | 'REJECTED' | null  // Evet = ACCEPTED, Hayır = REJECTED
+  driverResponseTime?: string                       // ISO timestamp
+  // SMS Gönderim Durumu
+  smsSent?: boolean                                 // Base44'ten SMS gönderildi bilgisi
+  smsSentTime?: string                              // SMS gönderim zamanı
 }
 
 export interface ImportedDriver {
@@ -236,4 +243,117 @@ export async function updateGroupPrice(groupId: string, groupPrice: number, date
 
   await setImportData(data)
   return true
+}
+
+// Sürücü yanıtını güncelle
+export async function updateOrderResponse(
+  orderId: string,
+  response: 'ACCEPTED' | 'REJECTED',
+  date?: string | Date
+): Promise<boolean> {
+  const dateKey = date ? formatDateKey(date) : await getLatestDate()
+  if (!dateKey) return false
+
+  const data = await getImportData(dateKey)
+  if (!data) return false
+
+  const order = data.orders.find(o => o.id === orderId)
+  if (order) {
+    order.driverResponse = response
+    order.driverResponseTime = new Date().toISOString()
+
+    // REJECTED durumunda driver bilgisini temizle (yeniden atama için)
+    if (response === 'REJECTED') {
+      order.driverName = undefined
+      order.status = 'PENDING'
+    } else {
+      order.status = 'CONFIRMED'
+    }
+
+    await setImportData(data)
+    return true
+  }
+  return false
+}
+
+// ==========================================
+// POZİSYON YÖNETİMİ (Canvas node pozisyonları)
+// ==========================================
+
+export interface NodePositions {
+  [nodeId: string]: { x: number; y: number }
+}
+
+const POSITIONS_PREFIX = 'canvas:positions'
+const POSITIONS_TTL = 60 * 60 * 24 * 7 // 7 gün
+
+function getPositionsKey(date: string): string {
+  return `${POSITIONS_PREFIX}:${date}`
+}
+
+// Pozisyonları kaydet
+export async function saveNodePositions(positions: NodePositions, date?: string | Date): Promise<void> {
+  const dateKey = date ? formatDateKey(date) : await getLatestDate()
+  if (!dateKey) return
+
+  const storeKey = getPositionsKey(dateKey)
+
+  if (isRedisConfigured()) {
+    try {
+      await redis.set(storeKey, JSON.stringify(positions), { ex: POSITIONS_TTL })
+      console.log(`[POSITIONS] ${Object.keys(positions).length} pozisyon Redis'e kaydedildi (${dateKey})`)
+    } catch (error) {
+      console.error('[POSITIONS] Redis kayıt hatası:', error)
+    }
+  }
+}
+
+// Pozisyonları getir
+export async function getNodePositions(date?: string | Date): Promise<NodePositions> {
+  const dateKey = date ? formatDateKey(date) : await getLatestDate()
+  if (!dateKey) return {}
+
+  const storeKey = getPositionsKey(dateKey)
+
+  if (isRedisConfigured()) {
+    try {
+      const data = await redis.get<string>(storeKey)
+      if (data) {
+        const parsed = typeof data === 'string' ? JSON.parse(data) : data
+        console.log(`[POSITIONS] ${Object.keys(parsed).length} pozisyon Redis'ten okundu (${dateKey})`)
+        return parsed as NodePositions
+      }
+    } catch (error) {
+      console.error('[POSITIONS] Redis okuma hatası:', error)
+    }
+  }
+  return {}
+}
+
+// Tek bir node pozisyonunu güncelle (incremental)
+export async function updateNodePosition(
+  nodeId: string,
+  position: { x: number; y: number },
+  date?: string | Date
+): Promise<void> {
+  const positions = await getNodePositions(date)
+  positions[nodeId] = position
+  await saveNodePositions(positions, date)
+}
+
+// Pozisyonları sil
+export async function clearNodePositions(date?: string | Date): Promise<void> {
+  const dateKey = date ? formatDateKey(date) : await getLatestDate()
+  if (!dateKey) return
+
+  const storeKey = getPositionsKey(dateKey)
+
+  if (isRedisConfigured()) {
+    try {
+      await redis.del(storeKey)
+      console.log(`[POSITIONS] Pozisyonlar silindi (${dateKey})`)
+    } catch (error) {
+      console.error('[POSITIONS] Redis silme hatası:', error)
+    }
+  }
 }

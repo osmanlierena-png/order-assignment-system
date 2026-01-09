@@ -9,6 +9,7 @@ export const TIME_SLOTS = {
 export const STATUS_LABELS: Record<string, string> = {
   PENDING: 'Beklemede',
   ASSIGNED: 'Atandı',
+  CONFIRMED: 'Onaylandı',
   IN_TRANSIT: 'Yolda',
   DELIVERED: 'Teslim Edildi',
   CANCELLED: 'İptal',
@@ -18,9 +19,28 @@ export const STATUS_LABELS: Record<string, string> = {
 export const STATUS_COLORS: Record<string, string> = {
   PENDING: 'bg-yellow-100 text-yellow-800',
   ASSIGNED: 'bg-blue-100 text-blue-800',
+  CONFIRMED: 'bg-green-100 text-green-800',
   IN_TRANSIT: 'bg-purple-100 text-purple-800',
   DELIVERED: 'bg-green-100 text-green-800',
   CANCELLED: 'bg-red-100 text-red-800',
+}
+
+// Sürücü yanıt etiketleri
+export const RESPONSE_LABELS: Record<string, string> = {
+  ACCEPTED: 'Onayladı',
+  REJECTED: 'Reddetti',
+}
+
+// Sürücü yanıt renkleri
+export const RESPONSE_COLORS: Record<string, string> = {
+  ACCEPTED: 'bg-green-500 text-white',
+  REJECTED: 'bg-red-500 text-white',
+}
+
+// Sürücü yanıt ikonları
+export const RESPONSE_ICONS: Record<string, string> = {
+  ACCEPTED: '✅',
+  REJECTED: '❌',
 }
 
 // CSV başlık eşleştirmeleri (Türkçe -> İngilizce)

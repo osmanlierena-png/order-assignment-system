@@ -2,7 +2,7 @@
 
 import { memo } from 'react'
 import { Handle, Position, NodeProps } from 'reactflow'
-import { STATUS_LABELS, TIME_SLOTS } from '@/lib/constants'
+import { STATUS_LABELS, TIME_SLOTS, RESPONSE_ICONS, RESPONSE_LABELS } from '@/lib/constants'
 import SearchableDriverSelect from '@/components/ui/SearchableDriverSelect'
 
 interface Driver {
@@ -25,6 +25,9 @@ interface OrderNodeData {
   groupIndex?: number // Grup içi sıra (1, 2, 3...)
   groupSize?: number  // Gruptaki toplam sipariş
   price?: number      // Sipariş fiyatı
+  driverResponse?: 'ACCEPTED' | 'REJECTED' | null  // Sürücü yanıtı
+  driverResponseTime?: string                       // Yanıt zamanı
+  smsSent?: boolean                                  // SMS gönderildi mi?
   drivers?: Driver[]
   onDriverSelect?: (orderId: string, driverName: string) => void
   onPriceChange?: (orderId: string, price: number) => void
@@ -70,6 +73,39 @@ function OrderNode({ data, selected }: NodeProps<OrderNodeData>) {
         position={Position.Left}
         className="w-4 h-4 !bg-blue-500 !border-2 !border-white"
       />
+
+      {/* Sürücü Yanıt Badge */}
+      {data.driverResponse && (
+        <div
+          className={`
+            absolute -top-2 -right-2 px-2 py-0.5 rounded-full text-[10px] font-bold shadow-md z-10
+            ${data.driverResponse === 'ACCEPTED' ? 'bg-green-500 text-white' : 'bg-red-500 text-white'}
+          `}
+          title={`${RESPONSE_LABELS[data.driverResponse]} - ${data.driverResponseTime ? new Date(data.driverResponseTime).toLocaleString('tr-TR') : ''}`}
+        >
+          {RESPONSE_ICONS[data.driverResponse]}
+        </div>
+      )}
+
+      {/* Atandı Badge - Sürücü atanmış ama SMS gönderilmemiş */}
+      {data.driver && !data.smsSent && !data.driverResponse && (
+        <div
+          className="absolute -top-2 -right-2 px-2 py-0.5 rounded-full text-[10px] font-bold shadow-md z-10 bg-blue-500 text-white"
+          title="Sürücü atandı - SMS bekleniyor"
+        >
+          📋 ATANDI
+        </div>
+      )}
+
+      {/* Yanıt Bekliyor Badge - SMS gönderilmiş ama yanıt yok */}
+      {data.driver && data.smsSent && !data.driverResponse && (
+        <div
+          className="absolute -top-2 -right-2 px-2 py-0.5 rounded-full text-[10px] font-bold shadow-md z-10 bg-yellow-500 text-white"
+          title="Sürücü yanıtı bekleniyor"
+        >
+          ⏳ BEKLİYOR
+        </div>
+      )}
 
       {/* Header - Order No ve Status */}
       <div className="flex items-center justify-between mb-2 pb-2 border-b border-black/10">
@@ -161,6 +197,14 @@ function OrderNode({ data, selected }: NodeProps<OrderNodeData>) {
             />
           </div>
         </div>
+
+        {/* Reddedilmişse yeniden atama uyarısı */}
+        {data.driverResponse === 'REJECTED' && (
+          <div className="px-2 py-1.5 bg-red-100 border border-red-300 rounded text-xs text-red-700 flex items-center gap-2">
+            <span>⚠️</span>
+            <span>Sürücü reddetti - Yeniden atama gerekli</span>
+          </div>
+        )}
       </div>
 
       {/* Sağ bağlantı noktası */}

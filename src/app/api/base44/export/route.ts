@@ -4,7 +4,21 @@ import { NextRequest, NextResponse } from 'next/server'
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-API-Secret',
+}
+
+// API Secret doğrulama - Server-to-server güvenliği
+function validateApiSecret(request: NextRequest): boolean {
+  const apiSecret = request.headers.get('X-API-Secret')
+  const expectedSecret = process.env.CANVAS_API_SECRET
+
+  // Secret tanımlı değilse, güvenlik devre dışı (development)
+  if (!expectedSecret) {
+    console.warn('[SECURITY] CANVAS_API_SECRET tanımlı değil - güvenlik devre dışı')
+    return true
+  }
+
+  return apiSecret === expectedSecret
 }
 
 // OPTIONS - CORS preflight
@@ -15,7 +29,8 @@ export async function OPTIONS() {
 interface Assignment {
   orderId: string
   orderNumber: string
-  driverName: string | null
+  driverId: string | null    // Tekil tanımlayıcı (önerilen)
+  driverName: string | null  // Geriye uyumluluk için
   groupId: string | null
   price: number
   groupPrice?: number
@@ -35,6 +50,15 @@ interface ExportRequest {
  */
 export async function POST(request: NextRequest) {
   try {
+    // API Secret doğrulama
+    if (!validateApiSecret(request)) {
+      console.error('[BASE44 EXPORT] Unauthorized - Invalid API Secret')
+      return NextResponse.json(
+        { error: 'Unauthorized - Invalid API Secret' },
+        { status: 401, headers: corsHeaders }
+      )
+    }
+
     const body: ExportRequest = await request.json()
     const { date, assignments, triggerSMS = false } = body
 
@@ -85,9 +109,9 @@ export async function POST(request: NextRequest) {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          // Base44 API token varsa ekle
+          // Base44 API key - görseldeki formata göre
           ...(process.env.BASE44_API_TOKEN && {
-            'Authorization': `Bearer ${process.env.BASE44_API_TOKEN}`
+            'api_key': process.env.BASE44_API_TOKEN
           })
         },
         body: JSON.stringify({
@@ -95,7 +119,8 @@ export async function POST(request: NextRequest) {
           assignments: assignments.map(a => ({
             orderId: a.orderId,
             orderNumber: a.orderNumber,
-            driverName: a.driverName,
+            driverId: a.driverId,      // Tekil tanımlayıcı (önerilen)
+            driverName: a.driverName,  // Geriye uyumluluk için
             groupId: a.groupId,
             price: a.price,
             groupPrice: a.groupPrice

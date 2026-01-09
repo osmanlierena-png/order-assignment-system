@@ -30,6 +30,9 @@ interface Order {
   orderDate?: string // ISO date string
   price?: number          // Sipariş fiyatı ($)
   groupPrice?: number     // Grup fiyatı
+  driverResponse?: 'ACCEPTED' | 'REJECTED' | null  // Sürücü yanıtı
+  driverResponseTime?: string                       // Yanıt zamanı
+  smsSent?: boolean                                  // SMS gönderildi mi?
 }
 
 interface OrderGroup {
@@ -132,6 +135,18 @@ export default function AtamaPage() {
     fetchData()
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []) // İlk yükleme için sadece bir kez çalışsın
+
+  // Polling - Sürücü yanıt güncellemeleri için (30 saniyede bir)
+  useEffect(() => {
+    if (!selectedDate) return
+
+    const pollInterval = setInterval(() => {
+      console.log('[POLLING] Yanıt güncellemelerini kontrol ediyor...')
+      fetchData(selectedDate)
+    }, 30000) // 30 saniye
+
+    return () => clearInterval(pollInterval)
+  }, [selectedDate, fetchData])
 
   // Tarih değiştiğinde verileri yeniden yükle
   const handleDateChange = (newDate: string) => {
@@ -378,6 +393,8 @@ export default function AtamaPage() {
     try {
       const response = await fetch(`/api/orders/${orderId}/ungroup`, {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ date: selectedDate })
       })
 
       if (!response.ok) {
@@ -385,6 +402,8 @@ export default function AtamaPage() {
         await fetchData()
         throw new Error('Gruptan çıkarma başarısız')
       }
+
+      console.log(`[UNGROUP] Sipariş ${orderId} gruptan çıkarıldı ve Redis'e kaydedildi`)
     } catch (error) {
       setMessage({ type: 'error', text: 'Sipariş gruptan çıkarılamadı' })
     }
@@ -743,6 +762,7 @@ export default function AtamaPage() {
         orders={orders}
         groups={groups}
         drivers={drivers}
+        selectedDate={selectedDate}
         onAssign={handleAssign}
         onGroupAssign={handleGroupAssign}
         onRemoveFromGroup={handleRemoveFromGroup}

@@ -2,7 +2,7 @@
 
 import { memo, useMemo } from 'react'
 import { Handle, Position, NodeProps } from 'reactflow'
-import { TIME_SLOTS } from '@/lib/constants'
+import { TIME_SLOTS, RESPONSE_ICONS, RESPONSE_LABELS } from '@/lib/constants'
 import SearchableDriverSelect from '@/components/ui/SearchableDriverSelect'
 
 interface Driver {
@@ -22,6 +22,9 @@ interface OrderInGroup {
   driver: string | null
   timeSlot?: string // Her siparişin kendi zaman dilimi
   price?: number    // Sipariş fiyatı
+  driverResponse?: 'ACCEPTED' | 'REJECTED' | null  // Sürücü yanıtı
+  driverResponseTime?: string                       // Yanıt zamanı
+  smsSent?: boolean                                  // SMS gönderildi mi?
 }
 
 interface GroupNodeData {
@@ -142,6 +145,28 @@ function GroupNode({ data }: NodeProps<GroupNodeData>) {
   const timeSlotInfo = TIME_SLOTS[data.timeSlot as keyof typeof TIME_SLOTS]
   const baseColor = isMixed ? '#f0abfc' : (timeSlotInfo?.color || '#e5e7eb') // MIXED için pembe
 
+  // Grup yanıt durumu hesapla
+  const groupResponseStatus = useMemo(() => {
+    const responses = data.orders.map(o => o.driverResponse).filter(Boolean)
+    const hasRejection = responses.includes('REJECTED')
+    const allAccepted = responses.length === data.orders.length && responses.every(r => r === 'ACCEPTED')
+
+    // SMS gönderildi mi kontrol et (gruptaki herhangi birinde smsSent=true ise)
+    const smsSent = data.orders.some(o => o.smsSent)
+
+    // Sürücü atanmış mı kontrol et
+    const hasDriver = data.orders.some(o => o.driver)
+
+    // Sadece SMS gönderilmişse "Yanıt Bekliyor" göster
+    const pendingResponse = smsSent && data.orders.some(o => o.driver && !o.driverResponse)
+
+    if (hasRejection) return 'REJECTED'
+    if (allAccepted) return 'ACCEPTED'
+    if (pendingResponse) return 'PENDING_RESPONSE'
+    if (hasDriver && !smsSent) return 'ASSIGNED' // Atandı ama SMS henüz gönderilmedi
+    return null
+  }, [data.orders])
+
   // Grup validasyonu
   const issues = useMemo(() => validateGroup(data.orders), [data.orders])
   const hasIssues = issues.length > 0
@@ -253,6 +278,27 @@ function GroupNode({ data }: NodeProps<GroupNodeData>) {
           <span className="text-sm opacity-90">Sipariş</span>
           {isMixed && !hasIssues && (
             <span className="text-[10px] bg-white/20 px-1.5 py-0.5 rounded">MIXED</span>
+          )}
+          {/* Grup Yanıt Durumu Badge */}
+          {groupResponseStatus === 'REJECTED' && (
+            <span className="text-[10px] bg-red-500 text-white px-2 py-0.5 rounded-full font-bold shadow">
+              ❌ RED
+            </span>
+          )}
+          {groupResponseStatus === 'ACCEPTED' && (
+            <span className="text-[10px] bg-green-500 text-white px-2 py-0.5 rounded-full font-bold shadow">
+              ✅ ONAYLANDI
+            </span>
+          )}
+          {groupResponseStatus === 'PENDING_RESPONSE' && (
+            <span className="text-[10px] bg-yellow-500 text-white px-2 py-0.5 rounded-full font-bold shadow">
+              ⏳ YANIT BEKLİYOR
+            </span>
+          )}
+          {groupResponseStatus === 'ASSIGNED' && (
+            <span className="text-[10px] bg-blue-500 text-white px-2 py-0.5 rounded-full font-bold shadow">
+              📋 ATANDI
+            </span>
           )}
         </div>
         <span className={`text-xs px-2 py-1 rounded-full ${getBadgeClass()}`}>
@@ -397,6 +443,14 @@ function GroupNode({ data }: NodeProps<GroupNodeData>) {
           }}
           placeholder="Sürücü Seç (Tüm Grup)"
         />
+
+        {/* Grup Reddedilmişse Uyarı */}
+        {groupResponseStatus === 'REJECTED' && (
+          <div className="mt-2 px-2 py-1.5 bg-red-100 border border-red-300 rounded text-xs text-red-700 flex items-center gap-2">
+            <span>⚠️</span>
+            <span>Grup reddedildi - Yeniden atama gerekli</span>
+          </div>
+        )}
       </div>
 
       {/* Sağ bağlantı noktası */}

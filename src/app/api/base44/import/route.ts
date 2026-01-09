@@ -6,7 +6,21 @@ import { setImportData, getImportData, getAvailableDates, getLatestDate, Importe
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-API-Secret',
+}
+
+// API Secret doğrulama - Server-to-server güvenliği
+function validateApiSecret(request: NextRequest): boolean {
+  const apiSecret = request.headers.get('X-API-Secret')
+  const expectedSecret = process.env.CANVAS_API_SECRET
+
+  // Secret tanımlı değilse, güvenlik devre dışı (development)
+  if (!expectedSecret) {
+    console.warn('[SECURITY] CANVAS_API_SECRET tanımlı değil - güvenlik devre dışı')
+    return true
+  }
+
+  return apiSecret === expectedSecret
 }
 
 // OPTIONS - CORS preflight
@@ -51,6 +65,15 @@ interface ImportRequest {
  */
 export async function POST(request: NextRequest) {
   try {
+    // API Secret doğrulama
+    if (!validateApiSecret(request)) {
+      console.error('[BASE44 IMPORT] Unauthorized - Invalid API Secret')
+      return NextResponse.json(
+        { error: 'Unauthorized - Invalid API Secret' },
+        { status: 401, headers: corsHeaders }
+      )
+    }
+
     const body: ImportRequest = await request.json()
     const { date, orders, drivers } = body
 
