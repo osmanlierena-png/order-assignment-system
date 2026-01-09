@@ -97,8 +97,83 @@ function AssignmentCanvasInner({
   const [responseFilter, setResponseFilter] = useState<string>('ALL') // ALL, PENDING_RESPONSE, ACCEPTED, REJECTED
   const [assignmentFilter, setAssignmentFilter] = useState<string>('UNASSIGNED') // UNASSIGNED (varsayılan), ASSIGNED, ALL
 
+  // Arama
+  const [searchQuery, setSearchQuery] = useState<string>('')
+  const [searchResult, setSearchResult] = useState<{ found: boolean; nodeId: string | null; message: string } | null>(null)
+
   // useReactFlow hook - güncel node'ları almak için
-  const { getNodes, fitView } = useReactFlow()
+  const { getNodes, fitView, setCenter } = useReactFlow()
+
+  // Sipariş arama fonksiyonu
+  const handleSearch = useCallback(() => {
+    if (!searchQuery.trim()) {
+      setSearchResult(null)
+      return
+    }
+
+    const query = searchQuery.trim().toLowerCase()
+
+    // Önce tüm siparişlerde ara (filtreden bağımsız)
+    const foundOrder = orders.find(order =>
+      order.orderNumber.toLowerCase().includes(query) ||
+      order.pickupAddress.toLowerCase().includes(query) ||
+      order.dropoffAddress.toLowerCase().includes(query)
+    )
+
+    if (!foundOrder) {
+      setSearchResult({ found: false, nodeId: null, message: `"${searchQuery}" bulunamadı` })
+      return
+    }
+
+    // Node ID'sini belirle (grup içinde mi, tekil mi?)
+    let nodeId: string
+    if (foundOrder.groupId) {
+      nodeId = `group-${foundOrder.groupId}`
+    } else {
+      nodeId = `order-${foundOrder.id}`
+    }
+
+    // Filtreleri temizle ki node görünsün
+    setDateFilter('ALL')
+    setTimeSlotFilter('ALL')
+    setStatusFilter('ALL')
+    setGroupFilter('ALL')
+    setResponseFilter('ALL')
+    setAssignmentFilter('ALL')
+
+    // Kısa bir gecikme ile node'a odaklan (filtrelerin uygulanması için)
+    setTimeout(() => {
+      const currentNodes = getNodes()
+      const targetNode = currentNodes.find(n => n.id === nodeId)
+
+      if (targetNode) {
+        // Node'un merkezine git
+        setCenter(
+          targetNode.position.x + 180, // Node genişliğinin yarısı
+          targetNode.position.y + 100, // Node yüksekliğinin yarısı
+          { zoom: 1, duration: 500 }
+        )
+        setSearchResult({
+          found: true,
+          nodeId,
+          message: `✅ ${foundOrder.orderNumber} bulundu${foundOrder.groupId ? ' (grup içinde)' : ''}`
+        })
+      } else {
+        setSearchResult({ found: false, nodeId: null, message: `Node bulunamadı: ${nodeId}` })
+      }
+    }, 100)
+  }, [searchQuery, orders, getNodes, setCenter])
+
+  // Enter tuşu ile arama
+  const handleSearchKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      handleSearch()
+    }
+    if (e.key === 'Escape') {
+      setSearchQuery('')
+      setSearchResult(null)
+    }
+  }, [handleSearch])
 
   // Sayfa yüklendiğinde pozisyonları Redis'ten al
   useEffect(() => {
@@ -728,8 +803,51 @@ function AssignmentCanvasInner({
           )}
         </Panel>
 
-        {/* Özet bilgi - sağ üst */}
-        <Panel position="top-right" className="bg-white/90 backdrop-blur px-4 py-2 rounded-lg shadow-sm text-xs flex items-center gap-4">
+        {/* Arama - sağ üst köşe */}
+        <Panel position="top-right" className="flex flex-col gap-2">
+          {/* Arama kutusu */}
+          <div className="bg-white/95 backdrop-blur rounded-lg shadow-md px-3 py-2 flex items-center gap-2">
+            <span className="text-gray-400">🔍</span>
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              onKeyDown={handleSearchKeyDown}
+              placeholder="Sipariş ara... (Order No, Adres)"
+              className="bg-transparent border-none outline-none text-sm w-48 placeholder:text-gray-400"
+            />
+            {searchQuery && (
+              <button
+                onClick={() => {
+                  setSearchQuery('')
+                  setSearchResult(null)
+                }}
+                className="text-gray-400 hover:text-gray-600 text-xs"
+              >
+                ✕
+              </button>
+            )}
+            <button
+              onClick={handleSearch}
+              className="bg-blue-500 hover:bg-blue-600 text-white px-2 py-1 rounded text-xs"
+            >
+              Ara
+            </button>
+          </div>
+
+          {/* Arama sonucu */}
+          {searchResult && (
+            <div className={`text-xs px-3 py-1.5 rounded-lg ${
+              searchResult.found
+                ? 'bg-green-100 text-green-700'
+                : 'bg-red-100 text-red-700'
+            }`}>
+              {searchResult.message}
+            </div>
+          )}
+
+          {/* Özet bilgi */}
+          <div className="bg-white/90 backdrop-blur px-4 py-2 rounded-lg shadow-sm text-xs flex items-center gap-4">
           <span className="text-gray-600">
             <b className="text-blue-600">{filteredOrders.length}</b>/{orders.length} sipariş
           </span>
@@ -753,6 +871,7 @@ function AssignmentCanvasInner({
               </span>
             </>
           )}
+          </div>
         </Panel>
 
         {/* Kontroller */}
