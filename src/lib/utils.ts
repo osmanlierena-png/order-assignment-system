@@ -1,6 +1,17 @@
 import { TimeSlot } from '@/types/order'
 import { TIME_SLOTS } from './constants'
 import { isReachableInTime, getZipRegion, isKnownZip } from './distance'
+import {
+  getClusterForZip,
+  isHighValueHub,
+  isLowGroupingArea,
+  areZipsInSameCluster,
+  getClusterGroupRate,
+  getCrossRegionBonus,
+  getRegionForZip
+} from './region-clusters'
+import { getZipPairFrequency } from './grouping-history'
+import { getDrivingTime, isGoogleMapsApiConfigured } from './distance-api'
 
 // className birleştirme (clsx benzeri)
 type ClassValue = string | undefined | null | false | Record<string, boolean>
@@ -680,8 +691,108 @@ function getLayeredBufferScore(buffer: number, layer: MergeLayer): number {
   }
 }
 
-// Ana birleştirme öneri fonksiyonu - TÜM KATMANLARI HESAPLAR
-export function calculateLayeredMergeSuggestions(
+// =====================================================
+// ÖĞRENEN SİSTEM BONUS PUANLARI
+// =====================================================
+
+// Öğrenen sistemden bonus puanı hesapla (async wrapper için sync versiyonu)
+// SİMÜLASYON SONRASI İYİLEŞTİRİLMİŞ AĞIRLIKLAR
+// Önceki: Cluster +25, Hub +20, Region +10 → Çok yüksekti, precision %2
+// Yeni: Cluster +15, Hub +12, Region +6 → Daha dengeli
+function getLearningBonusSync(
+  dropoffZip1: string | null,
+  dropoffZip2: string | null,
+  pickupAddress1: string,
+  pickupAddress2: string
+): { bonus: number; reasons: string[] } {
+  let bonus = 0
+  const reasons: string[] = []
+
+  // 1. Cluster bazlı bonus (25 → 15)
+  if (dropoffZip1 && dropoffZip2) {
+    if (areZipsInSameCluster(dropoffZip1, dropoffZip2)) {
+      bonus += 15  // Düşürüldü: 25 → 15
+      const cluster = getClusterForZip(dropoffZip1)
+      reasons.push(`Aynı cluster (${cluster?.name || 'bilinmeyen'})`)
+    }
+
+    // Cross-region bonus (10/8/5 → 6/5/3)
+    const region1 = getRegionForZip(dropoffZip1)
+    const region2 = getRegionForZip(dropoffZip2)
+    const crossBonus = getCrossRegionBonus(region1, region2)
+    if (crossBonus > 0) {
+      const adjustedBonus = Math.floor(crossBonus * 0.6)  // %60'a düşürüldü
+      bonus += adjustedBonus
+      reasons.push(`${region1}-${region2} (+${adjustedBonus})`)
+    }
+
+    // Cluster gruplama oranı bonusu (15/8 → 10/5)
+    const rate1 = getClusterGroupRate(dropoffZip1)
+    const rate2 = getClusterGroupRate(dropoffZip2)
+    const avgRate = (rate1 + rate2) / 2
+    if (avgRate >= 0.8) {
+      bonus += 10  // Düşürüldü: 15 → 10
+      reasons.push('Yüksek gruplama bölgesi')
+    } else if (avgRate >= 0.6) {
+      bonus += 5   // Düşürüldü: 8 → 5
+    }
+  }
+
+  // 2. Hub bonus (20 → 12)
+  const hub1 = isHighValueHub(pickupAddress1)
+  const hub2 = isHighValueHub(pickupAddress2)
+  if (hub1.isHub) {
+    bonus += Math.floor(hub1.groupRate * 12)  // Düşürüldü: 20 → 12
+    reasons.push(`Hub: ${pickupAddress1.substring(0, 20)}...`)
+  }
+  if (hub2.isHub) {
+    bonus += Math.floor(hub2.groupRate * 12)
+  }
+
+  // 3. Düşük gruplama bölgesi cezası (15 → 20, daha ağır ceza)
+  if (dropoffZip1 && isLowGroupingArea(dropoffZip1)) {
+    bonus -= 20  // Artırıldı: 15 → 20 (daha sert ceza)
+    reasons.push('Düşük gruplama bölgesi')
+  }
+  if (dropoffZip2 && isLowGroupingArea(dropoffZip2)) {
+    bonus -= 20
+  }
+
+  return { bonus, reasons }
+}
+
+// Async versiyon - tarihsel veri ile
+export async function getLearningBonusAsync(
+  dropoffZip1: string | null,
+  dropoffZip2: string | null,
+  pickupAddress1: string,
+  pickupAddress2: string
+): Promise<{ bonus: number; reasons: string[] }> {
+  // Sync bonus'u al
+  const syncResult = getLearningBonusSync(dropoffZip1, dropoffZip2, pickupAddress1, pickupAddress2)
+
+  // Tarihsel veri bonus'u ekle
+  if (dropoffZip1 && dropoffZip2) {
+    try {
+      const historicalPair = await getZipPairFrequency(dropoffZip1, dropoffZip2)
+      if (historicalPair && historicalPair.count >= 3) {
+        syncResult.bonus += 20
+        syncResult.reasons.push(`Geçmişte ${historicalPair.count}x birlikte`)
+      }
+    } catch (e) {
+      // Redis hatası - sessizce devam et
+    }
+  }
+
+  return syncResult
+}
+
+// Sürüş süresi toleransı (dakika)
+// buffer >= drivingTime + DRIVING_TIME_TOLERANCE olmalı
+const DRIVING_TIME_TOLERANCE = 10
+
+// Ana birleştirme öneri fonksiyonu - TÜM KATMANLARI HESAPLAR + ÖĞRENEN SİSTEM + GERÇEK SÜRÜŞ SÜRESİ
+export async function calculateLayeredMergeSuggestions(
   orders: Array<{
     id: string
     orderNumber: string
@@ -691,12 +802,13 @@ export function calculateLayeredMergeSuggestions(
     dropoffAddress: string
     timeSlot: string
     groupId: string | null
-  }>
-): {
+  }>,
+  useRealDrivingTime: boolean = true // Gerçek sürüş süresi kullanılsın mı?
+): Promise<{
   tight: LayeredMergeSuggestion[]    // 2'li sıkı birleştirmeler
   normal: LayeredMergeSuggestion[]   // 2-3'lü normal birleştirmeler
   loose: LayeredMergeSuggestion[]    // 3-4'lü gevşek birleştirmeler
-} {
+}> {
   const ungroupedOrders = orders.filter(o => !o.groupId)
 
   // Tüm siparişlere zaman bilgisi ekle
@@ -765,6 +877,33 @@ export function calculateLayeredMergeSuggestions(
         continue
       }
 
+      // ==========================================
+      // GERÇEK SÜRÜŞ SÜRESİ KONTROLÜ (Google Maps API)
+      // ==========================================
+      let realDrivingMinutes: number | null = null
+
+      if (useRealDrivingTime && isGoogleMapsApiConfigured()) {
+        try {
+          const drivingResult = await getDrivingTime(first.dropoffAddress, second.pickupAddress)
+          realDrivingMinutes = drivingResult.durationMinutes
+
+          // Buffer, gerçek sürüş süresi + toleranstan az ise birleştirme yapma
+          if (buffer < realDrivingMinutes + DRIVING_TIME_TOLERANCE) {
+            console.log(`[SÜRÜŞ-RED] ${first.orderNumber} → ${second.orderNumber}: ` +
+              `buffer=${buffer}dk < sürüş=${realDrivingMinutes}dk + ${DRIVING_TIME_TOLERANCE}dk tolerans ` +
+              `(kaynak: ${drivingResult.source})`)
+            continue
+          }
+
+          console.log(`[SÜRÜŞ-OK] ${first.orderNumber} → ${second.orderNumber}: ` +
+            `buffer=${buffer}dk >= sürüş=${realDrivingMinutes}dk + ${DRIVING_TIME_TOLERANCE}dk ` +
+            `(kaynak: ${drivingResult.source})`)
+        } catch (error) {
+          console.error(`[SÜRÜŞ-HATA] ${first.orderNumber} → ${second.orderNumber}:`, error)
+          // API hatası durumunda mevcut mantıkla devam et
+        }
+      }
+
       // TIGHT katmanı (15-45dk, aynı dilim)
       if (buffer <= LAYER_RULES.TIGHT.maxBuffer) {
         const bufferScore = getLayeredBufferScore(buffer, 'TIGHT')
@@ -772,6 +911,12 @@ export function calculateLayeredMergeSuggestions(
         // Aynı zaman dilimi kontrolü
         if (first.timeSlot === second.timeSlot) {
           let score = bufferScore + regionScore
+          const allReasons: string[] = [`${buffer}dk buffer`, `${fromRegion}→${toRegion}`, 'Aynı dilim']
+
+          // Gerçek sürüş süresi bilgisini ekle
+          if (realDrivingMinutes !== null) {
+            allReasons.push(`${realDrivingMinutes}dk sürüş`)
+          }
 
           // ZIP yakınlığı bonus
           if (first.dropoffZip && second.pickupZip) {
@@ -782,17 +927,23 @@ export function calculateLayeredMergeSuggestions(
           // Aynı dilim bonus
           score += 10
 
+          // ÖĞRENEN SİSTEM BONUSU
+          const learningBonus = getLearningBonusSync(
+            first.dropoffZip,
+            second.dropoffZip,
+            first.pickupAddress,
+            second.pickupAddress
+          )
+          score += learningBonus.bonus
+          allReasons.push(...learningBonus.reasons)
+
           if (score >= LAYER_RULES.TIGHT.minScore) {
             tight.push({
               orderIds: [first.id, second.id],
               orderNumbers: [first.orderNumber, second.orderNumber],
               score,
               layer: 'TIGHT',
-              reasons: [
-                `${buffer}dk buffer`,
-                `${fromRegion}→${toRegion}`,
-                'Aynı dilim'
-              ],
+              reasons: allReasons,
               buffers: [buffer],
               avgBuffer: buffer
             })
@@ -804,6 +955,16 @@ export function calculateLayeredMergeSuggestions(
       if (buffer <= LAYER_RULES.NORMAL.maxBuffer) {
         const bufferScore = getLayeredBufferScore(buffer, 'NORMAL')
         let score = bufferScore + regionScore
+        const normalReasons: string[] = [
+          `${buffer}dk buffer`,
+          `${fromRegion}→${toRegion}`,
+          first.timeSlot === second.timeSlot ? 'Aynı dilim' : 'Farklı dilim'
+        ]
+
+        // Gerçek sürüş süresi bilgisini ekle
+        if (realDrivingMinutes !== null) {
+          normalReasons.push(`${realDrivingMinutes}dk sürüş`)
+        }
 
         // ZIP yakınlığı bonus
         if (first.dropoffZip && second.pickupZip) {
@@ -814,17 +975,23 @@ export function calculateLayeredMergeSuggestions(
         // Aynı dilim bonus
         if (first.timeSlot === second.timeSlot) score += 10
 
+        // ÖĞRENEN SİSTEM BONUSU
+        const learningBonus = getLearningBonusSync(
+          first.dropoffZip,
+          second.dropoffZip,
+          first.pickupAddress,
+          second.pickupAddress
+        )
+        score += learningBonus.bonus
+        normalReasons.push(...learningBonus.reasons)
+
         if (score >= LAYER_RULES.NORMAL.minScore) {
           normal.push({
             orderIds: [first.id, second.id],
             orderNumbers: [first.orderNumber, second.orderNumber],
             score,
             layer: 'NORMAL',
-            reasons: [
-              `${buffer}dk buffer`,
-              `${fromRegion}→${toRegion}`,
-              first.timeSlot === second.timeSlot ? 'Aynı dilim' : 'Farklı dilim'
-            ],
+            reasons: normalReasons,
             buffers: [buffer],
             avgBuffer: buffer
           })

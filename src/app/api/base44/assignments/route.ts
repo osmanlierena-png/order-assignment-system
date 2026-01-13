@@ -95,28 +95,45 @@ export async function GET(request: NextRequest) {
       }, { status: 404, headers: corsHeaders })
     }
 
-    // Atamaları hazırla
-    let assignments = importData.orders.map(order => ({
-      orderId: order.id,
-      orderNumber: order.orderNumber,
-      driverName: order.driverName || null,
-      driverId: order.driverId || null,
-      groupId: order.groupId || null,
-      price: order.price || 0,
-      groupPrice: order.groupPrice || 0,
-      status: order.status || 'PENDING',
-      // Ek bilgiler (Base44'ün ihtiyacı olabilir)
-      pickupTime: order.pickupTime,
-      dropoffTime: order.dropoffTime,
-      pickupAddress: order.pickupAddress,
-      dropoffAddress: order.dropoffAddress,
-      timeSlot: order.timeSlot,
-      // Yanıt bilgileri
-      driverResponse: order.driverResponse || null,
-      driverResponseTime: order.driverResponseTime || null,
-      smsSent: order.smsSent || false,
-      smsSentTime: order.smsSentTime || null
-    }))
+    // Grup sürücü haritası oluştur - gruptaki herhangi bir siparişte sürücü varsa, tüm gruba uygula
+    const groupDriverMap: Record<string, string> = {}
+    importData.orders.forEach(order => {
+      if (order.groupId && order.driverName) {
+        groupDriverMap[order.groupId] = order.driverName
+      }
+    })
+
+    // Atamaları hazırla - grup içindeki eksik sürücüleri tamamla
+    let assignments = importData.orders.map(order => {
+      // Eğer sipariş gruplu ve sürücüsü yoksa, gruptaki diğer siparişin sürücüsünü al
+      let driverName = order.driverName || null
+      if (!driverName && order.groupId && groupDriverMap[order.groupId]) {
+        driverName = groupDriverMap[order.groupId]
+        console.log(`[ASSIGNMENTS] Grup ${order.groupId} için eksik sürücü tamamlandı: ${driverName}`)
+      }
+
+      return {
+        orderId: order.id,
+        orderNumber: order.orderNumber,
+        driverName,
+        driverId: order.driverId || null,
+        groupId: order.groupId || null,
+        price: order.price || 0,
+        groupPrice: order.groupPrice || 0,
+        status: driverName ? 'ASSIGNED' : (order.status || 'PENDING'),
+        // Ek bilgiler (Base44'ün ihtiyacı olabilir)
+        pickupTime: order.pickupTime,
+        dropoffTime: order.dropoffTime,
+        pickupAddress: order.pickupAddress,
+        dropoffAddress: order.dropoffAddress,
+        timeSlot: order.timeSlot,
+        // Yanıt bilgileri
+        driverResponse: order.driverResponse || null,
+        driverResponseTime: order.driverResponseTime || null,
+        smsSent: order.smsSent || false,
+        smsSentTime: order.smsSentTime || null
+      }
+    })
 
     // Status filtresi uygula
     if (statusFilter === 'assigned') {

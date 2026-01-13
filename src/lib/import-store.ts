@@ -43,8 +43,12 @@ export interface ImportedOrder {
   driverPhone?: string
   timeSlot?: string
   groupId?: string | null
+  groupSource?: 'system' | 'manual'  // Grup kaynağı
   price?: number          // Sipariş fiyatı ($)
   groupPrice?: number     // Grup fiyatı (grup içindeki ilk siparişte tutulur)
+  tipAmount?: number      // Tip miktarı (Base44 OCR'dan)
+  priceAmount?: number    // Toplam fiyat (Base44 OCR'dan)
+  isHighValue?: boolean   // Büyük sipariş ($500+)
   // Sürücü Yanıt Bilgileri
   driverResponse?: 'ACCEPTED' | 'REJECTED' | null  // Evet = ACCEPTED, Hayır = REJECTED
   driverResponseTime?: string                       // ISO timestamp

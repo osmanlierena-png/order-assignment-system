@@ -1,6 +1,6 @@
 'use client'
 
-import { memo } from 'react'
+import { memo, useState } from 'react'
 import { Handle, Position, NodeProps } from 'reactflow'
 import { STATUS_LABELS, TIME_SLOTS, RESPONSE_ICONS, RESPONSE_LABELS } from '@/lib/constants'
 import SearchableDriverSelect from '@/components/ui/SearchableDriverSelect'
@@ -25,6 +25,9 @@ interface OrderNodeData {
   groupIndex?: number // Grup içi sıra (1, 2, 3...)
   groupSize?: number  // Gruptaki toplam sipariş
   price?: number      // Sipariş fiyatı
+  tipAmount?: number  // Tip miktarı (Base44 OCR'dan)
+  priceAmount?: number // Toplam fiyat (Base44 OCR'dan)
+  isHighValue?: boolean // Büyük sipariş ($500+)
   driverResponse?: 'ACCEPTED' | 'REJECTED' | null  // Sürücü yanıtı
   driverResponseTime?: string                       // Yanıt zamanı
   smsSent?: boolean                                  // SMS gönderildi mi?
@@ -43,12 +46,16 @@ function formatAddress(address: string): { street: string; zip: string | null } 
 }
 
 function OrderNode({ data, selected }: NodeProps<OrderNodeData>) {
+  const [priceDetailsOpen, setPriceDetailsOpen] = useState(false)
   const timeSlotInfo = TIME_SLOTS[data.timeSlot as keyof typeof TIME_SLOTS]
   const baseColor = timeSlotInfo?.color || '#e5e7eb'
 
   // Adresleri formatla
   const pickup = formatAddress(data.pickupAddress)
   const dropoff = formatAddress(data.dropoffAddress)
+
+  // Tip veya toplam fiyat var mı?
+  const hasPriceDetails = (data.tipAmount && data.tipAmount > 0) || (data.priceAmount && data.priceAmount > 0)
 
   return (
     <div
@@ -73,6 +80,16 @@ function OrderNode({ data, selected }: NodeProps<OrderNodeData>) {
         position={Position.Left}
         className="w-4 h-4 !bg-blue-500 !border-2 !border-white"
       />
+
+      {/* Büyük Sipariş Badge - Sol üst köşe ($500+) */}
+      {data.isHighValue && (
+        <div
+          className="absolute -top-2 -left-2 w-6 h-6 flex items-center justify-center bg-amber-500 text-white rounded-full shadow-md z-10"
+          title={`Büyük Sipariş: $${data.priceAmount?.toFixed(2) || '500+'}`}
+        >
+          <span className="text-xs">💎</span>
+        </div>
+      )}
 
       {/* Sürücü Yanıt Badge */}
       {data.driverResponse && (
@@ -159,26 +176,79 @@ function OrderNode({ data, selected }: NodeProps<OrderNodeData>) {
 
       {/* Fiyat ve Sürücü Seçimi */}
       <div className="mt-2 pt-2 border-t border-black/10 space-y-2">
-        {/* Fiyat Girişi */}
-        <div className="flex items-center gap-2">
-          <span className="text-green-600 text-sm">💰</span>
-          <div className="flex items-center flex-1">
-            <span className="text-xs text-gray-600 mr-1">$</span>
-            <input
-              type="number"
-              value={data.price || ''}
-              onChange={(e) => {
-                const value = parseFloat(e.target.value) || 0
-                if (data.onPriceChange) {
-                  data.onPriceChange(data.id, value)
-                }
-              }}
-              placeholder="0.00"
-              className="w-20 text-sm px-2 py-1 border border-gray-300 rounded bg-white focus:outline-none focus:ring-1 focus:ring-green-500"
-              step="0.01"
-              min="0"
-            />
+        {/* Fiyat Girişi ve Tip Tooltip */}
+        <div>
+          <div className="flex items-center gap-2">
+            {/* Tip ikonu - hover'da tooltip */}
+            {data.tipAmount && data.tipAmount > 0 ? (
+              <div
+                className="relative group cursor-pointer"
+                title={`Tip: $${data.tipAmount.toFixed(2)}`}
+              >
+                <span className="text-amber-600 text-sm">🎁</span>
+                {/* Tooltip */}
+                <div className="absolute hidden group-hover:block -top-8 left-1/2 -translate-x-1/2 px-2 py-1 bg-gray-800 text-white text-xs rounded shadow-lg whitespace-nowrap z-50">
+                  Tip: ${data.tipAmount.toFixed(2)}
+                </div>
+              </div>
+            ) : (
+              <span className="text-gray-400 text-sm">🎁</span>
+            )}
+            <span className="text-green-600 text-sm">💰</span>
+            <div className="flex items-center flex-1">
+              <span className="text-xs text-gray-600 mr-1">$</span>
+              <input
+                type="number"
+                value={data.price || ''}
+                onChange={(e) => {
+                  const value = parseFloat(e.target.value) || 0
+                  if (data.onPriceChange) {
+                    data.onPriceChange(data.id, value)
+                  }
+                }}
+                placeholder="0.00"
+                className="w-20 text-sm px-2 py-1 border border-gray-300 rounded bg-white focus:outline-none focus:ring-1 focus:ring-green-500"
+                step="0.01"
+                min="0"
+              />
+            </div>
+            {/* Açılır panel butonu - sadece detay varsa göster */}
+            {hasPriceDetails && (
+              <button
+                onClick={() => setPriceDetailsOpen(!priceDetailsOpen)}
+                className="text-xs px-2 py-1 bg-gray-100 hover:bg-gray-200 rounded transition-colors flex items-center gap-1"
+                title="Fiyat detaylarını göster"
+              >
+                <span>{priceDetailsOpen ? '▲' : '▼'}</span>
+              </button>
+            )}
           </div>
+
+          {/* Açılır Fiyat Detayları Paneli */}
+          {priceDetailsOpen && hasPriceDetails && (
+            <div className="mt-2 p-2 bg-white/80 rounded-lg border border-gray-200 space-y-1 transition-all">
+              {data.tipAmount && data.tipAmount > 0 && (
+                <div className="flex items-center justify-between text-xs">
+                  <span className="flex items-center gap-1 text-amber-700">
+                    <span>🎁</span> Tip:
+                  </span>
+                  <span className="px-2 py-0.5 bg-amber-100 text-amber-800 rounded font-medium">
+                    ${data.tipAmount.toFixed(2)}
+                  </span>
+                </div>
+              )}
+              {data.priceAmount && data.priceAmount > 0 && (
+                <div className="flex items-center justify-between text-xs">
+                  <span className="flex items-center gap-1 text-green-700">
+                    <span>📦</span> Toplam:
+                  </span>
+                  <span className="px-2 py-0.5 bg-green-100 text-green-800 rounded font-medium">
+                    ${data.priceAmount.toFixed(2)}
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Sürücü Seçimi */}

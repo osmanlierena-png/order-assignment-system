@@ -1,9 +1,11 @@
 'use client'
 
-import { memo, useMemo } from 'react'
+import { memo, useMemo, useState } from 'react'
 import { Handle, Position, NodeProps } from 'reactflow'
 import { TIME_SLOTS, RESPONSE_ICONS, RESPONSE_LABELS } from '@/lib/constants'
 import SearchableDriverSelect from '@/components/ui/SearchableDriverSelect'
+import DrivingTimeIndicator from './DrivingTimeIndicator'
+import type { GroupSource } from '@/types/order'
 
 interface Driver {
   id: string
@@ -18,10 +20,17 @@ interface OrderInGroup {
   pickupAddress: string
   dropoffTime: string
   dropoffAddress: string
+  pickupLat?: number | null
+  pickupLng?: number | null
+  dropoffLat?: number | null
+  dropoffLng?: number | null
   status: string
   driver: string | null
   timeSlot?: string // Her siparişin kendi zaman dilimi
   price?: number    // Sipariş fiyatı
+  tipAmount?: number  // Tip miktarı (Base44 OCR'dan)
+  priceAmount?: number // Toplam fiyat (Base44 OCR'dan)
+  isHighValue?: boolean // Büyük sipariş ($500+)
   driverResponse?: 'ACCEPTED' | 'REJECTED' | null  // Sürücü yanıtı
   driverResponseTime?: string                       // Yanıt zamanı
   smsSent?: boolean                                  // SMS gönderildi mi?
@@ -32,6 +41,7 @@ interface GroupNodeData {
   timeSlot: string
   orders: OrderInGroup[]
   groupPrice?: number // Grup toplam fiyatı
+  groupSource?: GroupSource // Grup kaynağı: sistem mi manuel mi
   drivers?: Driver[]
   onDriverSelect?: (orderId: string, driverName: string) => void
   onRemoveFromGroup?: (orderId: string) => void
@@ -124,6 +134,21 @@ function validateGroup(orders: OrderInGroup[]): GroupIssue[] {
 }
 
 function GroupNode({ data }: NodeProps<GroupNodeData>) {
+  const [priceDetailsOpen, setPriceDetailsOpen] = useState(false)
+
+  // Grup toplam tip ve fiyat hesapla
+  const groupTotals = useMemo(() => {
+    let totalTip = 0
+    let totalPriceAmount = 0
+    data.orders.forEach(order => {
+      if (order.tipAmount) totalTip += order.tipAmount
+      if (order.priceAmount) totalPriceAmount += order.priceAmount
+    })
+    return { totalTip, totalPriceAmount }
+  }, [data.orders])
+
+  const hasGroupPriceDetails = groupTotals.totalTip > 0 || groupTotals.totalPriceAmount > 0
+
   // Gruptaki benzersiz zaman dilimlerini tespit et
   const uniqueTimeSlots = useMemo(() => {
     const slots = new Set<string>()
@@ -314,33 +339,79 @@ function GroupNode({ data }: NodeProps<GroupNodeData>) {
       />
 
       {/* Grup Fiyatı */}
-      <div className="px-3 py-2 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
-        <span className="text-xs font-semibold text-gray-600">Grup Fiyatı:</span>
-        <div className="flex items-center">
-          <span className="text-sm text-gray-600 mr-1">$</span>
-          <input
-            type="number"
-            value={data.groupPrice || ''}
-            onChange={(e) => {
-              const value = parseFloat(e.target.value) || 0
-              if (data.onGroupPriceChange) {
-                data.onGroupPriceChange(data.groupId, value)
-              }
-            }}
-            placeholder="0.00"
-            className="w-24 text-sm px-2 py-1 border border-gray-300 rounded bg-white focus:outline-none focus:ring-1 focus:ring-purple-500 font-bold"
-            step="0.01"
-            min="0"
-          />
+      <div className="px-3 py-2 bg-gray-50 border-b border-gray-200">
+        <div className="flex items-center justify-between">
+          <span className="text-xs font-semibold text-gray-600">Grup Fiyatı:</span>
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-gray-600">$</span>
+            <input
+              type="number"
+              value={data.groupPrice || ''}
+              onChange={(e) => {
+                const value = parseFloat(e.target.value) || 0
+                if (data.onGroupPriceChange) {
+                  data.onGroupPriceChange(data.groupId, value)
+                }
+              }}
+              placeholder="0.00"
+              className="w-24 text-sm px-2 py-1 border border-gray-300 rounded bg-white focus:outline-none focus:ring-1 focus:ring-purple-500 font-bold"
+              step="0.01"
+              min="0"
+            />
+            {/* Açılır panel butonu */}
+            {hasGroupPriceDetails && (
+              <button
+                onClick={() => setPriceDetailsOpen(!priceDetailsOpen)}
+                className="text-xs px-2 py-1 bg-gray-100 hover:bg-gray-200 rounded transition-colors flex items-center gap-1"
+                title="Fiyat detaylarını göster"
+              >
+                <span>{priceDetailsOpen ? '▲' : '▼'}</span>
+              </button>
+            )}
+          </div>
         </div>
+
+        {/* Açılır Fiyat Detayları Paneli */}
+        {priceDetailsOpen && hasGroupPriceDetails && (
+          <div className="mt-2 p-2 bg-white rounded-lg border border-gray-200 space-y-1">
+            {groupTotals.totalTip > 0 && (
+              <div className="flex items-center justify-between text-xs">
+                <span className="flex items-center gap-1 text-amber-700">
+                  <span>🎁</span> Toplam Tip:
+                </span>
+                <span className="px-2 py-0.5 bg-amber-100 text-amber-800 rounded font-medium">
+                  ${groupTotals.totalTip.toFixed(2)}
+                </span>
+              </div>
+            )}
+            {groupTotals.totalPriceAmount > 0 && (
+              <div className="flex items-center justify-between text-xs">
+                <span className="flex items-center gap-1 text-green-700">
+                  <span>📦</span> Toplam Fiyat:
+                </span>
+                <span className="px-2 py-0.5 bg-green-100 text-green-800 rounded font-medium">
+                  ${groupTotals.totalPriceAmount.toFixed(2)}
+                </span>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Grup içindeki siparişler */}
-      <div className="p-2 space-y-2">
+      <div className="p-2 space-y-1">
         {data.orders.map((order, index) => {
           const pickupZip = extractZip(order.pickupAddress)
           const dropoffZip = extractZip(order.dropoffAddress)
           const hasProblem = problemOrderIndices.has(index)
+
+          // Önceki sipariş (sürüş süresi göstergesi için)
+          const prevOrder = index > 0 ? data.orders[index - 1] : null
+
+          // Buffer hesapla (önceki dropoff ile şimdiki pickup arası)
+          const bufferMinutes = prevOrder
+            ? timeToMinutes(order.pickupTime) - timeToMinutes(prevOrder.dropoffTime)
+            : 0
 
           // Her siparişin kendi zaman dilimi
           const orderTimeSlot = order.timeSlot || data.timeSlot
@@ -355,74 +426,119 @@ function GroupNode({ data }: NodeProps<GroupNodeData>) {
           }
 
           return (
-            <div
-              key={order.id}
-              className={`relative rounded-xl p-3 border-2 shadow-sm transition-colors ${getBorderColor()}`}
-              style={{ backgroundColor: hasProblem ? undefined : orderBaseColor }}
-            >
-              {/* Sıra numarası */}
-              <div className={`absolute -top-2 -left-2 w-6 h-6 text-white rounded-full flex items-center justify-center text-xs font-bold shadow ${
-                hasProblem ? 'bg-red-500' : 'bg-purple-600'
-              }`}>
-                {index + 1}
-              </div>
+            <div key={order.id}>
+              {/* Sürüş Süresi Göstergesi - önceki sipariş varsa göster */}
+              {prevOrder && (
+                <DrivingTimeIndicator
+                  fromOrder={{
+                    dropoffAddress: prevOrder.dropoffAddress,
+                    dropoffTime: prevOrder.dropoffTime,
+                    dropoffLat: prevOrder.dropoffLat,
+                    dropoffLng: prevOrder.dropoffLng
+                  }}
+                  toOrder={{
+                    pickupAddress: order.pickupAddress,
+                    pickupTime: order.pickupTime,
+                    pickupLat: order.pickupLat,
+                    pickupLng: order.pickupLng
+                  }}
+                  bufferMinutes={bufferMinutes}
+                  groupSource={data.groupSource || 'manual'}
+                />
+              )}
 
-              {/* Gruptan çıkar butonu */}
-              <button
-                onClick={(e) => {
-                  e.stopPropagation()
-                  data.onRemoveFromGroup?.(order.id)
-                }}
-                className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 hover:bg-red-600 text-white rounded-full flex items-center justify-center text-xs font-bold shadow transition-colors"
-                title="Gruptan çıkar"
+              {/* Sipariş Kartı */}
+              <div
+                className={`relative rounded-xl p-3 border-2 shadow-sm transition-colors ${getBorderColor()}`}
+                style={{ backgroundColor: hasProblem ? undefined : orderBaseColor }}
               >
-                ×
-              </button>
-
-              {/* Sipariş bilgileri - kompakt */}
-              <div className="pl-4">
-                {/* Order number + Time Slot (MIXED durumunda) */}
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="font-mono text-[10px] text-gray-500 truncate">
-                    {order.orderNumber}
-                  </span>
-                  {isMixed && orderSlotInfo && (
-                    <span
-                      className="text-[9px] px-1.5 py-0.5 rounded font-semibold"
-                      style={{
-                        backgroundColor: orderSlotInfo.color,
-                        color: '#374151'
-                      }}
-                    >
-                      {orderTimeSlot === 'MORNING' ? '🌅' : orderTimeSlot === 'AFTERNOON' ? '☀️' : '🌙'}
-                    </span>
-                  )}
+                {/* Sıra numarası */}
+                <div className={`absolute -top-2 -left-2 w-6 h-6 text-white rounded-full flex items-center justify-center text-xs font-bold shadow ${
+                  hasProblem ? 'bg-red-500' : 'bg-purple-600'
+                }`}>
+                  {index + 1}
                 </div>
 
-                {/* Pickup */}
-                <div className="flex items-center gap-1 text-xs mb-1">
-                  <span className="text-blue-600 font-bold w-12 shrink-0">{order.pickupTime}</span>
-                  {pickupZip && (
-                    <span className="bg-blue-100 text-blue-700 px-1 py-0.5 rounded text-[9px] font-semibold shrink-0">
-                      {pickupZip}
-                    </span>
-                  )}
-                  <span className="text-[9px] text-gray-600 truncate" title={order.pickupAddress}>
-                    {shortenAddress(order.pickupAddress)}
-                  </span>
-                </div>
+                {/* Büyük Sipariş Badge ($500+) */}
+                {order.isHighValue && (
+                  <div
+                    className="absolute -top-2 left-6 w-5 h-5 flex items-center justify-center bg-amber-500 text-white rounded-full shadow-md z-10"
+                    title={`Büyük Sipariş: $${order.priceAmount?.toFixed(2) || '500+'}`}
+                  >
+                    <span className="text-[10px]">💎</span>
+                  </div>
+                )}
 
-                {/* Dropoff */}
-                <div className="flex items-center gap-1 text-xs">
-                  <span className="text-green-600 font-bold w-12 shrink-0">{order.dropoffTime}</span>
-                  {dropoffZip && (
-                    <span className="bg-green-100 text-green-700 px-1 py-0.5 rounded text-[9px] font-semibold shrink-0">
-                      {dropoffZip}
+                {/* Gruptan çıkar butonu */}
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    data.onRemoveFromGroup?.(order.id)
+                  }}
+                  className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 hover:bg-red-600 text-white rounded-full flex items-center justify-center text-xs font-bold shadow transition-colors"
+                  title="Gruptan çıkar"
+                >
+                  ×
+                </button>
+
+                {/* Sipariş bilgileri - kompakt */}
+                <div className="pl-4">
+                  {/* Order number + Time Slot (MIXED durumunda) + Tip Tooltip */}
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="font-mono text-[10px] text-gray-500 truncate">
+                      {order.orderNumber}
                     </span>
-                  )}
-                  <span className="text-[9px] text-gray-600 truncate" title={order.dropoffAddress}>
-                    {shortenAddress(order.dropoffAddress)}
-                  </span>
+                    {/* Tip ikonu - hover'da tooltip */}
+                    {order.tipAmount && order.tipAmount > 0 && (
+                      <div
+                        className="relative group cursor-pointer"
+                        title={`Tip: $${order.tipAmount.toFixed(2)}`}
+                      >
+                        <span className="text-amber-600 text-[10px]">🎁</span>
+                        {/* Tooltip */}
+                        <div className="absolute hidden group-hover:block -top-6 left-1/2 -translate-x-1/2 px-2 py-0.5 bg-gray-800 text-white text-[9px] rounded shadow-lg whitespace-nowrap z-50">
+                          Tip: ${order.tipAmount.toFixed(2)}
+                        </div>
+                      </div>
+                    )}
+                    {isMixed && orderSlotInfo && (
+                      <span
+                        className="text-[9px] px-1.5 py-0.5 rounded font-semibold"
+                        style={{
+                          backgroundColor: orderSlotInfo.color,
+                          color: '#374151'
+                        }}
+                      >
+                        {orderTimeSlot === 'MORNING' ? '🌅' : orderTimeSlot === 'AFTERNOON' ? '☀️' : '🌙'}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Pickup */}
+                  <div className="flex items-center gap-1 text-xs mb-1">
+                    <span className="text-blue-600 font-bold w-12 shrink-0">{order.pickupTime}</span>
+                    {pickupZip && (
+                      <span className="bg-blue-100 text-blue-700 px-1 py-0.5 rounded text-[9px] font-semibold shrink-0">
+                        {pickupZip}
+                      </span>
+                    )}
+                    <span className="text-[9px] text-gray-600 truncate" title={order.pickupAddress}>
+                      {shortenAddress(order.pickupAddress)}
+                    </span>
+                  </div>
+
+                  {/* Dropoff */}
+                  <div className="flex items-center gap-1 text-xs">
+                    <span className="text-green-600 font-bold w-12 shrink-0">{order.dropoffTime}</span>
+                    {dropoffZip && (
+                      <span className="bg-green-100 text-green-700 px-1 py-0.5 rounded text-[9px] font-semibold shrink-0">
+                        {dropoffZip}
+                      </span>
+                    )}
+                    <span className="text-[9px] text-gray-600 truncate" title={order.dropoffAddress}>
+                      {shortenAddress(order.dropoffAddress)}
+                    </span>
+                  </div>
                 </div>
               </div>
             </div>

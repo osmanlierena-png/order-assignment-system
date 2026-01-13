@@ -30,6 +30,8 @@ interface Order {
   orderDate?: string // ISO date string
   price?: number          // Sipariş fiyatı ($)
   groupPrice?: number     // Grup fiyatı
+  tipAmount?: number      // Tip miktarı (Base44 OCR'dan)
+  priceAmount?: number    // Toplam fiyat (Base44 OCR'dan)
   driverResponse?: 'ACCEPTED' | 'REJECTED' | null  // Sürücü yanıtı
   driverResponseTime?: string                       // Yanıt zamanı
   smsSent?: boolean                                  // SMS gönderildi mi?
@@ -179,7 +181,9 @@ export default function AtamaPage() {
         console.log('[AUTO-MERGE] Katmanlı analiz başlıyor...')
 
         // Katmanlı önerileri hesapla
-        const layeredSuggestions = calculateLayeredMergeSuggestions(orders)
+        // Not: Client-side'da gerçek sürüş süresi kontrolü yapılmaz (API key server-side'da)
+        // Gerçek sürüş süresi kontrolü Base44 import sırasında server-side'da yapılır
+        const layeredSuggestions = await calculateLayeredMergeSuggestions(orders, false)
 
         console.log('[AUTO-MERGE] Katmanlı Öneriler:')
         console.log('  TIGHT:', layeredSuggestions.tight.length, layeredSuggestions.tight.slice(0, 3).map(s => `${s.orderNumbers.join('+')}(${s.score})`))
@@ -329,22 +333,22 @@ export default function AtamaPage() {
   // Grup ataması
   const handleGroupAssign = async (groupId: string, driverName: string) => {
     try {
-      // Gruptaki tüm siparişleri güncelle
+      // Gruptaki tüm siparişleri tek seferde güncelle (race condition önlenir)
       const groupOrders = orders.filter(o => o.groupId === groupId)
 
-      await Promise.all(
-        groupOrders.map(order =>
-          fetch(`/api/orders/${order.id}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              driver: driverName,
-              status: 'ASSIGNED',
-              date: selectedDate  // Tarih parametresi eklendi
-            }),
-          })
-        )
-      )
+      const response = await fetch('/api/orders/group-assign', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          groupId,
+          driverName,
+          date: selectedDate
+        }),
+      })
+
+      if (!response.ok) {
+        throw new Error('Grup ataması başarısız')
+      }
 
       // State güncelle
       setOrders(prev =>
@@ -547,6 +551,50 @@ export default function AtamaPage() {
     }
   }
 
+  // Gruplamayı kaydet (öğrenme sistemi)
+  const [savingGrouping, setSavingGrouping] = useState(false)
+
+  const handleSaveGrouping = async () => {
+    if (!selectedDate) {
+      setMessage({ type: 'error', text: 'Tarih seçilmedi' })
+      return
+    }
+
+    const groupedCount = orders.filter(o => o.groupId).length
+    if (groupedCount === 0) {
+      setMessage({ type: 'error', text: 'Kaydedilecek grup bulunamadı' })
+      setTimeout(() => setMessage(null), 3000)
+      return
+    }
+
+    setSavingGrouping(true)
+    try {
+      const response = await fetch('/api/grouping/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ date: selectedDate }),
+      })
+
+      const result = await response.json()
+
+      if (response.ok && result.success) {
+        setMessage({
+          type: 'success',
+          text: `Gruplama kaydedildi! ${result.saved.pairsLearned} pattern öğrenildi`
+        })
+      } else {
+        setMessage({ type: 'error', text: result.error || 'Kaydetme başarısız' })
+      }
+      setTimeout(() => setMessage(null), 5000)
+    } catch (error) {
+      console.error('Save grouping error:', error)
+      setMessage({ type: 'error', text: 'Gruplama kaydedilemedi' })
+      setTimeout(() => setMessage(null), 5000)
+    } finally {
+      setSavingGrouping(false)
+    }
+  }
+
   // Base44'e atamaları gönder
   const [exporting, setExporting] = useState(false)
 
@@ -687,6 +735,14 @@ export default function AtamaPage() {
             </Button>
             <Button onClick={() => fetchData(selectedDate || undefined)} variant="outline" className="text-xs py-1.5 px-3">
               ↻ Yenile
+            </Button>
+            <Button
+              onClick={handleSaveGrouping}
+              disabled={savingGrouping || orders.filter(o => o.groupId).length === 0}
+              variant="outline"
+              className="text-xs py-1.5 px-3 bg-blue-50 border-blue-300 text-blue-700 hover:bg-blue-100 disabled:opacity-50"
+            >
+              {savingGrouping ? '⏳ Kaydediliyor...' : '💾 Gruplamayı Kaydet'}
             </Button>
             <Button
               onClick={handleExportToBase44}

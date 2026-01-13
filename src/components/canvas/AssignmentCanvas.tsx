@@ -37,6 +37,8 @@ interface Order {
   orderDate?: string // ISO date string
   price?: number          // Sipariş fiyatı ($)
   groupPrice?: number     // Grup fiyatı
+  tipAmount?: number      // Tip miktarı (Base44 OCR'dan)
+  priceAmount?: number    // Toplam fiyat (Base44 OCR'dan)
   driverResponse?: 'ACCEPTED' | 'REJECTED' | null  // Sürücü yanıtı
   driverResponseTime?: string                       // Yanıt zamanı
   smsSent?: boolean                                  // SMS gönderildi mi?
@@ -459,6 +461,8 @@ function AssignmentCanvasInner({
             driver: o.driver,
             timeSlot: o.timeSlot, // Her sipariş için zaman dilimi
             price: o.price,
+            tipAmount: o.tipAmount,           // Tip miktarı
+            priceAmount: o.priceAmount,       // Toplam fiyat
             driverResponse: o.driverResponse,      // Sürücü yanıtı
             driverResponseTime: o.driverResponseTime,
             smsSent: o.smsSent,                    // SMS gönderildi mi?
@@ -503,6 +507,8 @@ function AssignmentCanvasInner({
           driver: order.driver,
           groupId: null,
           price: order.price,
+          tipAmount: order.tipAmount,           // Tip miktarı
+          priceAmount: order.priceAmount,       // Toplam fiyat
           driverResponse: order.driverResponse,      // Sürücü yanıtı
           driverResponseTime: order.driverResponseTime,
           smsSent: order.smsSent,                    // SMS gönderildi mi?

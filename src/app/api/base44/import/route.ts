@@ -43,6 +43,8 @@ interface Base44Order {
   customerName?: string
   driverName?: string
   driverPhone?: string
+  tipAmount?: number      // Base44 OCR'dan gelen tip
+  priceAmount?: number    // Base44 OCR'dan gelen toplam fiyat
 }
 
 interface Base44Driver {
@@ -106,7 +108,10 @@ export async function POST(request: NextRequest) {
       driverName: order.driverName,
       driverPhone: order.driverPhone,
       timeSlot: getTimeSlot(order.pickupTime),
-      groupId: null
+      groupId: null,
+      tipAmount: order.tipAmount,
+      priceAmount: order.priceAmount,
+      isHighValue: (order.priceAmount || 0) >= 500  // $500+ = Büyük Sipariş
     }))
 
     // Sürücüleri işle (artık Base44'ten gelmeyebilir, drivers boş olabilir)
@@ -133,8 +138,8 @@ export async function POST(request: NextRequest) {
       groupId: null as string | null
     }))
 
-    // Katmanlı birleştirme önerilerini hesapla
-    const suggestions = calculateLayeredMergeSuggestions(ordersForGrouping)
+    // Katmanlı birleştirme önerilerini hesapla (artık async - gerçek sürüş süresi kullanıyor)
+    const suggestions = await calculateLayeredMergeSuggestions(ordersForGrouping)
 
     // En iyi birleştirmeleri seç (çakışma olmadan)
     const selectedMerges = selectBestMerges(suggestions)
@@ -154,6 +159,7 @@ export async function POST(request: NextRequest) {
         const order = processedOrders.find(o => o.id === orderId)
         if (order) {
           order.groupId = groupId
+          order.groupSource = 'system' // Sistem tarafından otomatik gruplanmış
           groupedOrderCount++
         }
       }

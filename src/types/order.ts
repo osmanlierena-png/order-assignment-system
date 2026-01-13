@@ -7,6 +7,9 @@ export type OrderStatus = 'PENDING' | 'ASSIGNED' | 'CONFIRMED' | 'IN_TRANSIT' | 
 // Sürücü yanıt durumları
 export type DriverResponse = 'ACCEPTED' | 'REJECTED' | null
 
+// Grup kaynağı - sistem mi yoksa kullanıcı mı oluşturdu
+export type GroupSource = 'system' | 'manual'
+
 // Sipariş tipi
 export interface Order {
   id: string
@@ -47,6 +50,7 @@ export interface OrderGroup {
   driverId: string | null
   driverName: string | null
   orderCount: number
+  source: GroupSource
   orders?: Order[]
   createdAt: Date
   updatedAt: Date

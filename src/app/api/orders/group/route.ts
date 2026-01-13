@@ -34,6 +34,7 @@ export async function POST(request: NextRequest) {
     if (targetGroupId) {
       groupId = targetGroupId
       sourceOrder.groupId = groupId
+      sourceOrder.groupSource = 'manual' // Kullanıcı tarafından eklendi
       console.log(`[GROUP API] Sipariş ${sourceOrderId} gruba eklendi: ${groupId}`)
     }
     // İki siparişi birleştir
@@ -46,7 +47,9 @@ export async function POST(request: NextRequest) {
       // Hedefin mevcut grubu varsa onu kullan, yoksa yeni oluştur
       groupId = targetOrder.groupId || generateId()
       sourceOrder.groupId = groupId
+      sourceOrder.groupSource = 'manual' // Kullanıcı birleştirdi
       targetOrder.groupId = groupId
+      targetOrder.groupSource = 'manual' // Kullanıcı birleştirdi
       console.log(`[GROUP API] Siparişler birleştirildi: ${sourceOrderId} + ${targetOrderId} → ${groupId}`)
     }
     else {

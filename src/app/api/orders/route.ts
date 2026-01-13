@@ -68,6 +68,15 @@ export async function GET(request: NextRequest) {
       notes: null,
       orderDate: importData?.date || new Date().toISOString(),
       customerName: o.customerName,
+      price: o.price || 0,
+      groupPrice: o.groupPrice || 0,
+      tipAmount: o.tipAmount || 0,
+      priceAmount: o.priceAmount || 0,
+      // Sürücü yanıt bilgileri
+      driverResponse: o.driverResponse || null,
+      driverResponseTime: o.driverResponseTime || null,
+      smsSent: o.smsSent || false,
+      smsSentTime: o.smsSentTime || null,
       // Meta bilgiler
       _dateKey: importData?.dateKey,
       _importTimestamp: importData?.timestamp
