@@ -12,6 +12,18 @@ import { getZipDistance, haversineDistance } from '@/lib/distance'
 // Google Maps Distance Matrix API URL
 const GOOGLE_MAPS_API_URL = 'https://maps.googleapis.com/maps/api/distancematrix/json'
 
+// Metre → Mile dönüşüm
+const METERS_TO_MILES = 0.000621371
+
+function metersToMiles(meters: number): number {
+  return Math.round(meters * METERS_TO_MILES * 10) / 10 // 1 ondalık
+}
+
+function formatMiles(meters: number): string {
+  const miles = metersToMiles(meters)
+  return `${miles} mi`
+}
+
 // Adres string'inden ZIP kodunu çıkar
 function extractZipFromAddress(address: string): string | null {
   // Amerikan ZIP kodu paterni: 5 rakam veya 5+4 format (12345 veya 12345-6789)
@@ -70,7 +82,8 @@ async function fetchGoogleDistance(
         durationSeconds: element.duration.value,
         durationText: element.duration.text,
         distanceMeters: element.distance.value,
-        distanceText: element.distance.text,
+        distanceText: formatMiles(element.distance.value), // Mile olarak göster
+        distanceMiles: metersToMiles(element.distance.value),
         source: 'google'
       }
     }
@@ -153,11 +166,13 @@ export async function POST(request: NextRequest) {
       if (originZip && destZip) {
         const zipResult = getZipDistance(originZip, destZip)
         if (zipResult) {
+          const distanceMeters = zipResult.distanceKm * 1000
           const data: CachedDistance = {
             durationSeconds: zipResult.drivingMinutes * 60,
             durationText: `~${zipResult.drivingMinutes} dk`,
-            distanceMeters: zipResult.distanceKm * 1000,
-            distanceText: `${zipResult.distanceKm} km`,
+            distanceMeters: distanceMeters,
+            distanceText: formatMiles(distanceMeters), // Mile olarak göster
+            distanceMiles: metersToMiles(distanceMeters),
             source: 'zip-estimate',
             timestamp: new Date().toISOString()
           }
@@ -177,12 +192,14 @@ export async function POST(request: NextRequest) {
       const distanceKm = haversineDistance(origin.lat, origin.lng, destination.lat, destination.lng)
       // Kaba tahmin: ortalama 2 dk/km
       const drivingMinutes = Math.max(5, Math.ceil(distanceKm * 2))
+      const distanceMeters = distanceKm * 1000
 
       const data: CachedDistance = {
         durationSeconds: drivingMinutes * 60,
         durationText: `~${drivingMinutes} dk`,
-        distanceMeters: distanceKm * 1000,
-        distanceText: `${Math.round(distanceKm * 10) / 10} km`,
+        distanceMeters: distanceMeters,
+        distanceText: formatMiles(distanceMeters), // Mile olarak göster
+        distanceMiles: metersToMiles(distanceMeters),
         source: 'haversine',
         timestamp: new Date().toISOString()
       }

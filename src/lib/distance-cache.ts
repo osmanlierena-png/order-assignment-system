@@ -18,6 +18,7 @@ export interface CachedDistance {
   durationText: string
   distanceMeters: number
   distanceText: string
+  distanceMiles?: number  // Mile cinsinden mesafe
   timestamp: string
   source: 'google' | 'zip-estimate' | 'haversine'
 }
