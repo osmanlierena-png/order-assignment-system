@@ -103,8 +103,10 @@ function AssignmentCanvasInner({
   const [searchQuery, setSearchQuery] = useState<string>('')
   const [searchResult, setSearchResult] = useState<{ found: boolean; nodeId: string | null; message: string } | null>(null)
 
-  // Gizli tip gösterimi - "erentip" yazınca aktif olur
+  // Gizli tip gösterimi - Ara butonuna 3 kere hızlıca basınca aktif olur
   const [showSecretTips, setShowSecretTips] = useState<boolean>(false)
+  const secretClickCount = useRef<number>(0)
+  const secretClickTimer = useRef<NodeJS.Timeout | null>(null)
 
   // useReactFlow hook - güncel node'ları almak için
   const { getNodes, fitView, setCenter } = useReactFlow()
@@ -172,20 +174,35 @@ function AssignmentCanvasInner({
   // Enter tuşu ile arama
   const handleSearchKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === 'Enter') {
-      // Gizli kod kontrolü - "erentip" ise arama yapma
-      if (searchQuery.toLowerCase() === 'erentip') {
-        setShowSecretTips(prev => !prev)
-        setSearchQuery('')
-        setSearchResult(null)
-        return
-      }
       handleSearch()
     }
     if (e.key === 'Escape') {
       setSearchQuery('')
       setSearchResult(null)
     }
-  }, [handleSearch, searchQuery])
+  }, [handleSearch])
+
+  // Gizli tip toggle - 3 hızlı tıklama
+  const handleSecretClick = useCallback(() => {
+    secretClickCount.current += 1
+
+    // Timer'ı sıfırla
+    if (secretClickTimer.current) {
+      clearTimeout(secretClickTimer.current)
+    }
+
+    // 3 tıklama olduysa toggle
+    if (secretClickCount.current >= 3) {
+      setShowSecretTips(prev => !prev)
+      secretClickCount.current = 0
+      return
+    }
+
+    // 1 saniye içinde 3'e ulaşmazsa sıfırla
+    secretClickTimer.current = setTimeout(() => {
+      secretClickCount.current = 0
+    }, 1000)
+  }, [])
 
   // Sayfa yüklendiğinde pozisyonları Redis'ten al
   useEffect(() => {
@@ -827,17 +844,7 @@ function AssignmentCanvasInner({
             <input
               type="text"
               value={searchQuery}
-              onChange={(e) => {
-                const value = e.target.value
-                // Gizli tip kontrolü - "erentip" yazınca toggle
-                if (value.toLowerCase() === 'erentip') {
-                  setShowSecretTips(prev => !prev)
-                  setSearchQuery('')
-                  setSearchResult(null)
-                } else {
-                  setSearchQuery(value)
-                }
-              }}
+              onChange={(e) => setSearchQuery(e.target.value)}
               onKeyDown={handleSearchKeyDown}
               placeholder="Sipariş ara... (Order No, Adres)"
               className="bg-transparent border-none outline-none text-sm w-48 placeholder:text-gray-400"
@@ -854,7 +861,10 @@ function AssignmentCanvasInner({
               </button>
             )}
             <button
-              onClick={handleSearch}
+              onClick={() => {
+                handleSecretClick() // 3 tıklama kontrolü
+                handleSearch()
+              }}
               className="bg-blue-500 hover:bg-blue-600 text-white px-2 py-1 rounded text-xs"
             >
               Ara
