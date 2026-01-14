@@ -789,6 +789,7 @@ export async function getLearningBonusAsync(
 
 // Sürüş süresi toleransı (dakika)
 // buffer >= drivingTime + DRIVING_TIME_TOLERANCE olmalı
+// 10dk tolerans: trafik, park etme, bina girişi gibi ekstra süreler için
 const DRIVING_TIME_TOLERANCE = 10
 
 // Ana birleştirme öneri fonksiyonu - TÜM KATMANLARI HESAPLAR + ÖĞRENEN SİSTEM + GERÇEK SÜRÜŞ SÜRESİ
@@ -888,15 +889,18 @@ export async function calculateLayeredMergeSuggestions(
           realDrivingMinutes = drivingResult.durationMinutes
 
           // Buffer, gerçek sürüş süresi + toleranstan az ise birleştirme yapma
-          if (buffer < realDrivingMinutes + DRIVING_TIME_TOLERANCE) {
+          const margin = buffer - realDrivingMinutes
+          if (margin < DRIVING_TIME_TOLERANCE) {
             console.log(`[SÜRÜŞ-RED] ${first.orderNumber} → ${second.orderNumber}: ` +
-              `buffer=${buffer}dk < sürüş=${realDrivingMinutes}dk + ${DRIVING_TIME_TOLERANCE}dk tolerans ` +
+              `marj=${margin}dk < ${DRIVING_TIME_TOLERANCE}dk tolerans ` +
+              `(buffer=${buffer}dk - sürüş=${realDrivingMinutes}dk) ` +
               `(kaynak: ${drivingResult.source})`)
             continue
           }
 
           console.log(`[SÜRÜŞ-OK] ${first.orderNumber} → ${second.orderNumber}: ` +
-            `buffer=${buffer}dk >= sürüş=${realDrivingMinutes}dk + ${DRIVING_TIME_TOLERANCE}dk ` +
+            `marj=${margin}dk >= ${DRIVING_TIME_TOLERANCE}dk tolerans ` +
+            `(buffer=${buffer}dk - sürüş=${realDrivingMinutes}dk) ` +
             `(kaynak: ${drivingResult.source})`)
         } catch (error) {
           console.error(`[SÜRÜŞ-HATA] ${first.orderNumber} → ${second.orderNumber}:`, error)

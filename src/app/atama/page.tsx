@@ -32,6 +32,7 @@ interface Order {
   groupPrice?: number     // Grup fiyatı
   tipAmount?: number      // Tip miktarı (Base44 OCR'dan)
   priceAmount?: number    // Toplam fiyat (Base44 OCR'dan)
+  isHighValue?: boolean   // Büyük sipariş ($500+)
   driverResponse?: 'ACCEPTED' | 'REJECTED' | null  // Sürücü yanıtı
   driverResponseTime?: string                       // Yanıt zamanı
   smsSent?: boolean                                  // SMS gönderildi mi?
@@ -59,6 +60,8 @@ export default function AtamaPage() {
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
   const [autoMerging, setAutoMerging] = useState(false)
   const autoMergeApplied = useRef(false)
+
+  // Sayfa seviyesi state (gerekirse)
 
   // Tarih yönetimi
   const [availableDates, setAvailableDates] = useState<string[]>([])
@@ -137,6 +140,7 @@ export default function AtamaPage() {
     fetchData()
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []) // İlk yükleme için sadece bir kez çalışsın
+
 
   // Polling - Sürücü yanıt güncellemeleri için (30 saniyede bir)
   useEffect(() => {
@@ -721,6 +725,7 @@ export default function AtamaPage() {
               <span className="text-gray-300">|</span>
               <span><b className="text-green-600">{drivers.length}</b> sürücü</span>
             </div>
+
           </div>
           <div className="flex items-center gap-2">
             <Button

@@ -1,8 +1,9 @@
 // Zaman dilimleri
+// Sabah: 4:00-9:00, Öğlen: 9:00-12:00, Akşam: 12:00+
 export const TIME_SLOTS = {
-  MORNING: { label: 'Sabah', start: 6, end: 12, color: '#fef3c7' },
-  AFTERNOON: { label: 'Öğlen', start: 12, end: 17, color: '#dbeafe' },
-  EVENING: { label: 'Akşam', start: 17, end: 22, color: '#ede9fe' },
+  MORNING: { label: 'Sabah', start: 4, end: 9, color: '#fef3c7' },
+  AFTERNOON: { label: 'Öğlen', start: 9, end: 12, color: '#dbeafe' },
+  EVENING: { label: 'Akşam', start: 12, end: 24, color: '#ede9fe' },
 } as const
 
 // Durum etiketleri

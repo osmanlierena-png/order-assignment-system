@@ -103,6 +103,9 @@ function AssignmentCanvasInner({
   const [searchQuery, setSearchQuery] = useState<string>('')
   const [searchResult, setSearchResult] = useState<{ found: boolean; nodeId: string | null; message: string } | null>(null)
 
+  // Gizli tip gösterimi - "erentip" yazınca aktif olur
+  const [showSecretTips, setShowSecretTips] = useState<boolean>(false)
+
   // useReactFlow hook - güncel node'ları almak için
   const { getNodes, fitView, setCenter } = useReactFlow()
 
@@ -817,7 +820,17 @@ function AssignmentCanvasInner({
             <input
               type="text"
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onChange={(e) => {
+                const value = e.target.value
+                // Gizli tip kontrolü - "erentip" yazınca toggle
+                if (value.toLowerCase() === 'erentip') {
+                  setShowSecretTips(prev => !prev)
+                  setSearchQuery('')
+                  setSearchResult(null)
+                } else {
+                  setSearchQuery(value)
+                }
+              }}
               onKeyDown={handleSearchKeyDown}
               placeholder="Sipariş ara... (Order No, Adres)"
               className="bg-transparent border-none outline-none text-sm w-48 placeholder:text-gray-400"
@@ -878,6 +891,17 @@ function AssignmentCanvasInner({
             </>
           )}
           </div>
+
+          {/* Gizli Toplam Tip Gösterimi - "erentip" yazınca görünür */}
+          {showSecretTips && (
+            <div className="bg-gradient-to-r from-amber-100 to-yellow-100 border border-amber-300 px-4 py-2 rounded-lg shadow-md flex items-center gap-2">
+              <span className="text-amber-600 text-lg">🎁</span>
+              <span className="text-amber-800 font-bold text-sm">
+                ${orders.reduce((sum, o) => sum + (o.tipAmount || 0), 0).toFixed(2)}
+              </span>
+              <span className="text-amber-600 text-xs">toplam tip</span>
+            </div>
+          )}
         </Panel>
 
         {/* Kontroller */}

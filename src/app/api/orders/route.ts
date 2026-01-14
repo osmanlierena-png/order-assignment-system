@@ -62,7 +62,7 @@ export async function GET(request: NextRequest) {
       pickupLng: o.pickupLng || null,
       dropoffLat: o.dropoffLat || null,
       dropoffLng: o.dropoffLng || null,
-      timeSlot: o.timeSlot || getTimeSlot(o.pickupTime),
+      timeSlot: getTimeSlot(o.pickupTime), // Her zaman yeniden hesapla
       groupId: o.groupId || null,
       status: o.status || 'PENDING',
       notes: null,
@@ -72,6 +72,7 @@ export async function GET(request: NextRequest) {
       groupPrice: o.groupPrice || 0,
       tipAmount: o.tipAmount || 0,
       priceAmount: o.priceAmount || 0,
+      isHighValue: o.isHighValue || (o.priceAmount && o.priceAmount >= 500) || false,
       // Sürücü yanıt bilgileri
       driverResponse: o.driverResponse || null,
       driverResponseTime: o.driverResponseTime || null,
