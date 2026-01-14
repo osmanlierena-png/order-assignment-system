@@ -172,13 +172,20 @@ function AssignmentCanvasInner({
   // Enter tuşu ile arama
   const handleSearchKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === 'Enter') {
+      // Gizli kod kontrolü - "erentip" ise arama yapma
+      if (searchQuery.toLowerCase() === 'erentip') {
+        setShowSecretTips(prev => !prev)
+        setSearchQuery('')
+        setSearchResult(null)
+        return
+      }
       handleSearch()
     }
     if (e.key === 'Escape') {
       setSearchQuery('')
       setSearchResult(null)
     }
-  }, [handleSearch])
+  }, [handleSearch, searchQuery])
 
   // Sayfa yüklendiğinde pozisyonları Redis'ten al
   useEffect(() => {
