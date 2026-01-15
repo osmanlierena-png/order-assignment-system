@@ -143,6 +143,7 @@ const DRIVERS = [
   { id: '139', name: 'Yigit Ozturk', phone: null },
   { id: '140', name: 'Yunus Emre', phone: null },
   { id: '141', name: 'Yusuf Kaya', phone: null },
+  { id: '142', name: 'Safak Ozturk', phone: null },
 ]
 
 // GET - Tüm sürücüleri listele
