@@ -278,7 +278,7 @@ function GroupNode({ data }: NodeProps<GroupNodeData>) {
 
   return (
     <div
-      className={`relative rounded-2xl shadow-xl border-4 overflow-hidden ${getBorderClass()}`}
+      className={`relative rounded-2xl shadow-xl border-4 overflow-visible ${getBorderClass()}`}
       style={{ minWidth: '340px', maxWidth: '380px' }}
     >
       {/* Uyarı Banner */}

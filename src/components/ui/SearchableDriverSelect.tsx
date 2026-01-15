@@ -127,7 +127,10 @@ export default function SearchableDriverSelect({
 
       {/* Dropdown */}
       {isOpen && (
-        <div className="absolute z-50 w-full mt-1 bg-white border-2 border-purple-300 rounded-lg shadow-xl overflow-hidden">
+        <div
+          className="absolute w-full mt-1 bg-white border-2 border-purple-300 rounded-lg shadow-xl"
+          style={{ zIndex: 9999 }}
+        >
           {/* Arama Input */}
           <div className="p-2 border-b border-gray-200">
             <input
@@ -138,11 +141,12 @@ export default function SearchableDriverSelect({
               placeholder="Sürücü adı ara..."
               className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:border-purple-400"
               onClick={(e) => e.stopPropagation()}
+              onMouseDown={(e) => e.stopPropagation()}
             />
           </div>
 
           {/* Sürücü Listesi */}
-          <div className="max-h-48 overflow-y-auto">
+          <div className="max-h-48 overflow-y-auto overscroll-contain">
             {filteredDrivers.length === 0 ? (
               <div className="px-3 py-2 text-xs text-gray-500 text-center">
                 Sürücü bulunamadı
