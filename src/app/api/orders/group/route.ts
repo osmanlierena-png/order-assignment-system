@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { generateId, extractZipFromAddress, timeToMinutes } from '@/lib/utils'
+import { generateId, extractZipCode, timeToMinutes } from '@/lib/utils'
 import { getImportData, setImportData, getLatestDate } from '@/lib/import-store'
 import { isReachableInTime } from '@/lib/distance'
 
@@ -49,10 +49,10 @@ export async function POST(request: NextRequest) {
       }
 
       // Mesafe ve süre kontrolü yap
-      const sourceDropoffZip = extractZipFromAddress(sourceOrder.dropoffAddress)
-      const targetPickupZip = extractZipFromAddress(targetOrder.pickupAddress)
-      const targetDropoffZip = extractZipFromAddress(targetOrder.dropoffAddress)
-      const sourcePickupZip = extractZipFromAddress(sourceOrder.pickupAddress)
+      const sourceDropoffZip = extractZipCode(sourceOrder.dropoffAddress)
+      const targetPickupZip = extractZipCode(targetOrder.pickupAddress)
+      const targetDropoffZip = extractZipCode(targetOrder.dropoffAddress)
+      const sourcePickupZip = extractZipCode(sourceOrder.pickupAddress)
 
       // Buffer hesapla (iki sipariş arasındaki zaman farkı)
       const sourceDropoffTime = timeToMinutes(sourceOrder.dropoffTime)
