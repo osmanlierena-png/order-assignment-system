@@ -28,6 +28,11 @@ export default function SearchableDriverSelect({
 
   // Filtrelenmiş sürücüler
   const filteredDrivers = useMemo(() => {
+    console.log('[DRIVER-SELECT] drivers prop:', drivers?.length || 0, 'search:', search)
+    if (!drivers || drivers.length === 0) {
+      console.warn('[DRIVER-SELECT] Drivers array boş!')
+      return []
+    }
     if (!search.trim()) return drivers
     const searchLower = search.toLowerCase()
     return drivers.filter(d =>
