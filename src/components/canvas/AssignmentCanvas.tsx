@@ -847,7 +847,7 @@ function AssignmentCanvasInner({
               onChange={(e) => setSearchQuery(e.target.value)}
               onKeyDown={handleSearchKeyDown}
               placeholder="Sipariş ara... (Order No, Adres)"
-              className="bg-transparent border-none outline-none text-sm w-48 placeholder:text-gray-400"
+              className="bg-transparent border-none outline-none text-sm w-48 placeholder:text-gray-400 text-gray-900"
             />
             {searchQuery && (
               <button
