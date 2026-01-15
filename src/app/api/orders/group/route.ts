@@ -4,7 +4,7 @@ import { getImportData, setImportData, getLatestDate } from '@/lib/import-store'
 import { isReachableInTime } from '@/lib/distance'
 
 const MIN_BUFFER_MINUTES = 5
-const MAX_DRIVING_MINUTES = 25
+// MAX_DRIVING_MINUTES is checked inside isReachableInTime
 
 // POST - İki siparişi veya sipariş + grubu birleştir
 export async function POST(request: NextRequest) {
@@ -33,6 +33,7 @@ export async function POST(request: NextRequest) {
     }
 
     let groupId: string
+    let warning: string | undefined = undefined
 
     // Mevcut gruba ekleme
     if (targetGroupId) {
@@ -61,48 +62,32 @@ export async function POST(request: NextRequest) {
       const sourcePickupTime = timeToMinutes(sourceOrder.pickupTime)
 
       // Hangi sipariş önce? (dropoff zamanına göre)
-      let firstOrder, secondOrder, firstDropoffZip, secondPickupZip, buffer
+      let firstDropoffZip, secondPickupZip, buffer
 
       if (sourceDropoffTime <= targetPickupTime) {
-        firstOrder = sourceOrder
-        secondOrder = targetOrder
         firstDropoffZip = sourceDropoffZip
         secondPickupZip = targetPickupZip
         buffer = targetPickupTime - sourceDropoffTime
       } else {
-        firstOrder = targetOrder
-        secondOrder = sourceOrder
         firstDropoffZip = targetDropoffZip
         secondPickupZip = sourcePickupZip
         buffer = sourcePickupTime - targetDropoffTime
       }
 
-      // Minimum buffer kontrolü
+      // Mesafe ve buffer kontrolü - sadece uyarı için log, engelleme yok (manuel gruplama)
       if (buffer < MIN_BUFFER_MINUTES) {
-        return NextResponse.json({
-          error: `Gruplamak için minimum ${MIN_BUFFER_MINUTES} dakika buffer gerekli. Mevcut: ${buffer} dakika`,
-          canGroup: false
-        }, { status: 400 })
+        warning = `Uyarı: Buffer çok kısa (${buffer}dk < ${MIN_BUFFER_MINUTES}dk)`
+        console.warn(`[GROUP API] ${warning}`)
       }
 
-      // Mesafe kontrolü
       if (firstDropoffZip && secondPickupZip) {
         const reachability = isReachableInTime(firstDropoffZip, secondPickupZip, buffer)
-
         if (!reachability.reachable) {
-          return NextResponse.json({
-            error: `Bu siparişler gruplanamaz: ${reachability.reason}`,
-            canGroup: false,
-            details: {
-              fromZip: firstDropoffZip,
-              toZip: secondPickupZip,
-              buffer: buffer,
-              maxDriving: MAX_DRIVING_MINUTES
-            }
-          }, { status: 400 })
+          warning = `Uyarı: ${reachability.reason}`
+          console.warn(`[GROUP API] ${warning}`)
+        } else {
+          console.log(`[GROUP API] Mesafe kontrolü OK: ${reachability.reason}`)
         }
-
-        console.log(`[GROUP API] Mesafe kontrolü OK: ${reachability.reason}`)
       }
 
       // Hedefin mevcut grubu varsa onu kullan, yoksa yeni oluştur
@@ -127,7 +112,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       message: 'Grup güncellendi',
-      groupId
+      groupId,
+      warning: warning || undefined
     })
   } catch (error) {
     console.error('Error grouping orders:', error)
