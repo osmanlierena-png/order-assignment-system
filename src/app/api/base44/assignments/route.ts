@@ -112,14 +112,19 @@ export async function GET(request: NextRequest) {
         console.log(`[ASSIGNMENTS] Grup ${order.groupId} için eksik sürücü tamamlandı: ${driverName}`)
       }
 
+      // Fiyat: önce sipariş fiyatı, yoksa grup fiyatı
+      const effectivePrice = order.price || order.groupPrice || 0
+
       return {
         orderId: order.id,
         orderNumber: order.orderNumber,
         driverName,
         driverId: order.driverId || null,
         groupId: order.groupId || null,
-        price: order.price || 0,
+        price: effectivePrice,  // Base44 için: price veya groupPrice
         groupPrice: order.groupPrice || 0,
+        offer: effectivePrice,  // Alternatif alan adı
+        driverPayment: effectivePrice,  // Başka alternatif
         status: driverName ? 'ASSIGNED' : (order.status || 'PENDING'),
         // Ek bilgiler (Base44'ün ihtiyacı olabilir)
         pickupTime: order.pickupTime,
