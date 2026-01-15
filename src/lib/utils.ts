@@ -629,11 +629,17 @@ export interface LayeredMergeSuggestion {
   avgBuffer: number
 }
 
+// =====================================================
+// GRUPLAMA LİMİTLERİ
+// =====================================================
+const MIN_BUFFER_MINUTES = 5  // Minimum buffer süresi (dakika)
+const MAX_DRIVING_MINUTES = 25  // Maximum sürüş süresi (dakika)
+
 // Katman kuralları (gerçek veriye dayalı)
 const LAYER_RULES = {
   // TIGHT: Ard arda siparişler (en yaygın: %33 - 15-45dk)
   TIGHT: {
-    minBuffer: 0,
+    minBuffer: 5,  // Minimum 5dk buffer gerekli
     maxBuffer: 45,
     minScore: 70,
     sameTimeSlotRequired: true,  // %81 aynı dilimde
@@ -642,7 +648,7 @@ const LAYER_RULES = {
   },
   // NORMAL: Standart birleştirme (%16 - 45-90dk)
   NORMAL: {
-    minBuffer: 0,
+    minBuffer: 5,  // Minimum 5dk buffer gerekli
     maxBuffer: 90,
     minScore: 55,
     sameTimeSlotRequired: false,
@@ -652,7 +658,7 @@ const LAYER_RULES = {
   // LOOSE: Gevşek birleştirme (%8 - 90-120dk)
   // 4+ gruplarda arada uzun buffer olabilir
   LOOSE: {
-    minBuffer: 0,
+    minBuffer: 5,  // Minimum 5dk buffer gerekli
     maxBuffer: 120,
     minScore: 45,
     sameTimeSlotRequired: false,
@@ -844,8 +850,11 @@ export async function calculateLayeredMergeSuggestions(
       const [first, second] = o1.pickupMinutes < o2.pickupMinutes ? [o1, o2] : [o2, o1]
       const buffer = second.pickupMinutes - first.dropoffMinutes
 
-      // Negatif buffer = çakışma
-      if (buffer < 0) continue
+      // Minimum buffer kontrolü - 5dk'dan az ise birleştirme yapma
+      if (buffer < MIN_BUFFER_MINUTES) {
+        console.log(`[BUFFER-RED] ${first.orderNumber} → ${second.orderNumber}: buffer=${buffer}dk < minimum ${MIN_BUFFER_MINUTES}dk`)
+        continue
+      }
 
       // ==========================================
       // MESAFE KONTROLÜ - Kritik validasyon

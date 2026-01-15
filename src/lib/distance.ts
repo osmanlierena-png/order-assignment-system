@@ -430,6 +430,10 @@ export function getZipDistance(zip1: string, zip2: string): ZipDistanceResult | 
   }
 }
 
+// Gruplama limitleri
+const MIN_BUFFER_MINUTES = 5  // Minimum buffer süresi (dakika)
+const MAX_DRIVING_MINUTES = 25  // Maximum sürüş süresi (dakika)
+
 /**
  * Verilen buffer süresi içinde bir noktadan diğerine ulaşılabilir mi?
  */
@@ -438,8 +442,14 @@ export function isReachableInTime(
   toZip: string,
   bufferMinutes: number
 ): { reachable: boolean; reason: string; distance?: ZipDistanceResult } {
-  // Aynı ZIP = kesinlikle ulaşılabilir
+  // Aynı ZIP bile olsa minimum buffer gerekli
   if (fromZip === toZip) {
+    if (bufferMinutes < MIN_BUFFER_MINUTES) {
+      return {
+        reachable: false,
+        reason: `Aynı ZIP ama buffer çok kısa: ${bufferMinutes}dk < ${MIN_BUFFER_MINUTES}dk minimum`
+      }
+    }
     return { reachable: true, reason: 'Aynı ZIP kodu' }
   }
 
@@ -450,6 +460,15 @@ export function isReachableInTime(
     return {
       reachable: false,
       reason: `ZIP koordinatı bulunamadı (${fromZip} veya ${toZip})`,
+    }
+  }
+
+  // Maximum sürüş süresi kontrolü - 25dk'dan fazla sürüş kabul edilmez
+  if (distance.drivingMinutes > MAX_DRIVING_MINUTES) {
+    return {
+      reachable: false,
+      reason: `Sürüş süresi çok uzun: ${distance.drivingMinutes}dk > ${MAX_DRIVING_MINUTES}dk maksimum`,
+      distance,
     }
   }
 
