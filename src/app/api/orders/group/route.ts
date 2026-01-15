@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { generateId, extractZipFromAddress, parseTimeToMinutes } from '@/lib/utils'
+import { generateId, extractZipFromAddress, timeToMinutes } from '@/lib/utils'
 import { getImportData, setImportData, getLatestDate } from '@/lib/import-store'
 import { isReachableInTime } from '@/lib/distance'
 
@@ -55,10 +55,10 @@ export async function POST(request: NextRequest) {
       const sourcePickupZip = extractZipFromAddress(sourceOrder.pickupAddress)
 
       // Buffer hesapla (iki sipariş arasındaki zaman farkı)
-      const sourceDropoffTime = parseTimeToMinutes(sourceOrder.dropoffTime)
-      const targetPickupTime = parseTimeToMinutes(targetOrder.pickupTime)
-      const targetDropoffTime = parseTimeToMinutes(targetOrder.dropoffTime)
-      const sourcePickupTime = parseTimeToMinutes(sourceOrder.pickupTime)
+      const sourceDropoffTime = timeToMinutes(sourceOrder.dropoffTime)
+      const targetPickupTime = timeToMinutes(targetOrder.pickupTime)
+      const targetDropoffTime = timeToMinutes(targetOrder.dropoffTime)
+      const sourcePickupTime = timeToMinutes(sourceOrder.pickupTime)
 
       // Hangi sipariş önce? (dropoff zamanına göre)
       let firstOrder, secondOrder, firstDropoffZip, secondPickupZip, buffer
