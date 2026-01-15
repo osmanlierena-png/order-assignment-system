@@ -433,7 +433,7 @@ export function getZipDistance(zip1: string, zip2: string): ZipDistanceResult | 
 // Gruplama limitleri
 const MIN_BUFFER_MINUTES = 5  // Minimum buffer süresi (dakika)
 const MAX_DRIVING_MINUTES = 25  // Maximum sürüş süresi (dakika)
-const MIN_MARGIN_MINUTES = 10  // Buffer ile sürüş arasındaki minimum fark (dakika)
+const MIN_MARGIN_MINUTES = 5  // Buffer ile sürüş arasındaki minimum fark (dakika)
 
 /**
  * Verilen buffer süresi içinde bir noktadan diğerine ulaşılabilir mi?
