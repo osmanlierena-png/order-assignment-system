@@ -24,7 +24,7 @@ export default function LoginPage() {
       const data = await response.json()
 
       if (data.success) {
-        router.push('/atama')
+        window.location.href = '/atama'
       } else {
         setError('Yanlis sifre')
         setPassword('')
