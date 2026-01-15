@@ -1039,6 +1039,47 @@ export async function calculateLayeredMergeSuggestions(
         // Negatif buffer = çakışma
         if (buffer1 < 0 || buffer2 < 0) continue
 
+        // MIN_BUFFER_MINUTES kontrolü - 5dk'dan az buffer varsa birleştirme yapma
+        if (buffer1 < MIN_BUFFER_MINUTES || buffer2 < MIN_BUFFER_MINUTES) {
+          console.log(`[3LÜ-BUFFER-RED] ${trio[0].orderNumber} → ${trio[1].orderNumber} → ${trio[2].orderNumber}: ` +
+            `buffer1=${buffer1}dk, buffer2=${buffer2}dk < minimum ${MIN_BUFFER_MINUTES}dk`)
+          continue
+        }
+
+        // MESAFE KONTROLÜ - Her iki geçiş için
+        let hasDistanceIssue = false
+
+        // Geçiş 1: trio[0].dropoff → trio[1].pickup
+        if (trio[0].dropoffZip && trio[1].pickupZip) {
+          const reach1 = isReachableInTime(trio[0].dropoffZip, trio[1].pickupZip, buffer1)
+          if (!reach1.reachable || !isKnownZip(trio[0].dropoffZip) || !isKnownZip(trio[1].pickupZip)) {
+            console.log(`[3LÜ-MESAFE-RED] ${trio[0].orderNumber} → ${trio[1].orderNumber}: ${reach1.reason || 'Bilinmeyen ZIP'}`)
+            hasDistanceIssue = true
+          }
+        }
+
+        // Geçiş 2: trio[1].dropoff → trio[2].pickup
+        if (!hasDistanceIssue && trio[1].dropoffZip && trio[2].pickupZip) {
+          const reach2 = isReachableInTime(trio[1].dropoffZip, trio[2].pickupZip, buffer2)
+          if (!reach2.reachable || !isKnownZip(trio[1].dropoffZip) || !isKnownZip(trio[2].pickupZip)) {
+            console.log(`[3LÜ-MESAFE-RED] ${trio[1].orderNumber} → ${trio[2].orderNumber}: ${reach2.reason || 'Bilinmeyen ZIP'}`)
+            hasDistanceIssue = true
+          }
+        }
+
+        if (hasDistanceIssue) continue
+
+        // FAR bölge kontrolü
+        const region0_3 = trio[0].dropoffZip ? getZipRegion(trio[0].dropoffZip) : 'UNKNOWN'
+        const region1p_3 = trio[1].pickupZip ? getZipRegion(trio[1].pickupZip) : 'UNKNOWN'
+        const region1d_3 = trio[1].dropoffZip ? getZipRegion(trio[1].dropoffZip) : 'UNKNOWN'
+        const region2p_3 = trio[2].pickupZip ? getZipRegion(trio[2].pickupZip) : 'UNKNOWN'
+
+        if (region0_3 === 'FAR' || region1p_3 === 'FAR' || region1d_3 === 'FAR' || region2p_3 === 'FAR') {
+          console.log(`[3LÜ-FAR-RED] ${trio[0].orderNumber} → ${trio[1].orderNumber} → ${trio[2].orderNumber}: Uzak bölge tespit edildi`)
+          continue
+        }
+
         const avgBuffer = (buffer1 + buffer2) / 2
 
         // 3'lü için: Her iki buffer da max 90dk (NORMAL) veya bir tanesi 120dk'ya kadar (LOOSE)
@@ -1132,6 +1173,42 @@ export async function calculateLayeredMergeSuggestions(
 
           // Negatif buffer kontrolü
           if (buffers.some(b => b < 0)) continue
+
+          // MIN_BUFFER_MINUTES kontrolü - tüm buffer'lar için
+          if (buffers.some(b => b < MIN_BUFFER_MINUTES)) {
+            console.log(`[4LÜ-BUFFER-RED] ${quad.map(o => o.orderNumber).join(' → ')}: ` +
+              `buffers=[${buffers.join(', ')}]dk, minimum=${MIN_BUFFER_MINUTES}dk`)
+            continue
+          }
+
+          // MESAFE KONTROLÜ - Her geçiş için
+          let hasQuadDistanceIssue = false
+          for (let m = 0; m < 3; m++) {
+            const fromZip = quad[m].dropoffZip
+            const toZip = quad[m + 1].pickupZip
+            if (fromZip && toZip) {
+              const reach = isReachableInTime(fromZip, toZip, buffers[m])
+              if (!reach.reachable || !isKnownZip(fromZip) || !isKnownZip(toZip)) {
+                console.log(`[4LÜ-MESAFE-RED] ${quad[m].orderNumber} → ${quad[m + 1].orderNumber}: ${reach.reason || 'Bilinmeyen ZIP'}`)
+                hasQuadDistanceIssue = true
+                break
+              }
+            }
+          }
+          if (hasQuadDistanceIssue) continue
+
+          // FAR bölge kontrolü
+          let hasFarRegion = false
+          for (const order of quad) {
+            const dropRegion = order.dropoffZip ? getZipRegion(order.dropoffZip) : 'UNKNOWN'
+            const pickRegion = order.pickupZip ? getZipRegion(order.pickupZip) : 'UNKNOWN'
+            if (dropRegion === 'FAR' || pickRegion === 'FAR') {
+              console.log(`[4LÜ-FAR-RED] ${quad.map(o => o.orderNumber).join(' → ')}: Uzak bölge tespit edildi`)
+              hasFarRegion = true
+              break
+            }
+          }
+          if (hasFarRegion) continue
 
           // 4'lü için: Ortalama ≤90dk, max ≤120dk
           const avgBuffer = buffers.reduce((a, b) => a + b, 0) / buffers.length
