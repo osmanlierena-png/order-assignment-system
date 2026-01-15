@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { generateId } from '@/lib/utils'
+import { generateId, extractZipFromAddress, parseTimeToMinutes } from '@/lib/utils'
 import { getImportData, setImportData, getLatestDate } from '@/lib/import-store'
+import { isReachableInTime } from '@/lib/distance'
+
+const MIN_BUFFER_MINUTES = 5
+const MAX_DRIVING_MINUTES = 25
 
 // POST - İki siparişi veya sipariş + grubu birleştir
 export async function POST(request: NextRequest) {
@@ -42,6 +46,63 @@ export async function POST(request: NextRequest) {
       const targetOrder = data.orders.find(o => o.id === targetOrderId)
       if (!targetOrder) {
         return NextResponse.json({ error: 'Hedef sipariş bulunamadı' }, { status: 404 })
+      }
+
+      // Mesafe ve süre kontrolü yap
+      const sourceDropoffZip = extractZipFromAddress(sourceOrder.dropoffAddress)
+      const targetPickupZip = extractZipFromAddress(targetOrder.pickupAddress)
+      const targetDropoffZip = extractZipFromAddress(targetOrder.dropoffAddress)
+      const sourcePickupZip = extractZipFromAddress(sourceOrder.pickupAddress)
+
+      // Buffer hesapla (iki sipariş arasındaki zaman farkı)
+      const sourceDropoffTime = parseTimeToMinutes(sourceOrder.dropoffTime)
+      const targetPickupTime = parseTimeToMinutes(targetOrder.pickupTime)
+      const targetDropoffTime = parseTimeToMinutes(targetOrder.dropoffTime)
+      const sourcePickupTime = parseTimeToMinutes(sourceOrder.pickupTime)
+
+      // Hangi sipariş önce? (dropoff zamanına göre)
+      let firstOrder, secondOrder, firstDropoffZip, secondPickupZip, buffer
+
+      if (sourceDropoffTime <= targetPickupTime) {
+        firstOrder = sourceOrder
+        secondOrder = targetOrder
+        firstDropoffZip = sourceDropoffZip
+        secondPickupZip = targetPickupZip
+        buffer = targetPickupTime - sourceDropoffTime
+      } else {
+        firstOrder = targetOrder
+        secondOrder = sourceOrder
+        firstDropoffZip = targetDropoffZip
+        secondPickupZip = sourcePickupZip
+        buffer = sourcePickupTime - targetDropoffTime
+      }
+
+      // Minimum buffer kontrolü
+      if (buffer < MIN_BUFFER_MINUTES) {
+        return NextResponse.json({
+          error: `Gruplamak için minimum ${MIN_BUFFER_MINUTES} dakika buffer gerekli. Mevcut: ${buffer} dakika`,
+          canGroup: false
+        }, { status: 400 })
+      }
+
+      // Mesafe kontrolü
+      if (firstDropoffZip && secondPickupZip) {
+        const reachability = isReachableInTime(firstDropoffZip, secondPickupZip, buffer)
+
+        if (!reachability.reachable) {
+          return NextResponse.json({
+            error: `Bu siparişler gruplanamaz: ${reachability.reason}`,
+            canGroup: false,
+            details: {
+              fromZip: firstDropoffZip,
+              toZip: secondPickupZip,
+              buffer: buffer,
+              maxDriving: MAX_DRIVING_MINUTES
+            }
+          }, { status: 400 })
+        }
+
+        console.log(`[GROUP API] Mesafe kontrolü OK: ${reachability.reason}`)
       }
 
       // Hedefin mevcut grubu varsa onu kullan, yoksa yeni oluştur
