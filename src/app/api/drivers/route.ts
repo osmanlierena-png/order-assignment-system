@@ -46,7 +46,7 @@ const DRIVERS = [
   { id: '42', name: 'Emrah Durmaz', phone: null },
   { id: '43', name: 'Emre Ari', phone: null },
   { id: '44', name: 'Enis Kiziltoprak', phone: null },
-  { id: '45', name: 'Eren Eren', phone: null },
+  { id: '45', name: 'Eren Osmanli', phone: null },
   { id: '46', name: 'Eren Kiziltoprak', phone: null },
   { id: '47', name: 'Ersad Alp', phone: null },
   { id: '48', name: 'Ersin Kayhan', phone: null },
