@@ -71,15 +71,22 @@ export default function SearchableDriverSelect({
   return (
     <div
       ref={containerRef}
-      className="relative nodrag"
+      className="relative nodrag nopan nowheel"
       onClick={(e) => e.stopPropagation()}
       onMouseDown={(e) => e.stopPropagation()}
       onPointerDown={(e) => e.stopPropagation()}
+      onTouchStart={(e) => e.stopPropagation()}
     >
       {/* Seçili Sürücü veya Buton */}
       <button
         type="button"
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={(e) => {
+          e.stopPropagation()
+          e.preventDefault()
+          setIsOpen(!isOpen)
+        }}
+        onMouseDown={(e) => e.stopPropagation()}
+        onPointerDown={(e) => e.stopPropagation()}
         className={`
           w-full text-xs px-3 py-2 rounded-lg border-2 text-left flex items-center justify-between
           ${selectedDriver

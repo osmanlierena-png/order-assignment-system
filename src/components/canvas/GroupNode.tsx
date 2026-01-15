@@ -550,14 +550,14 @@ function GroupNode({ data }: NodeProps<GroupNodeData>) {
       <div className="px-3 pb-3">
         <SearchableDriverSelect
           drivers={data.drivers || []}
-          selectedDriver={data.orders[0]?.driver || null}
+          selectedDriver={groupResponseStatus === 'REJECTED' ? null : (data.orders[0]?.driver || null)}
           onSelect={(driverName) => {
             // Tüm siparişlere aynı sürücüyü ata
             data.orders.forEach(order => {
               data.onDriverSelect?.(order.id, driverName)
             })
           }}
-          placeholder="Sürücü Seç (Tüm Grup)"
+          placeholder={groupResponseStatus === 'REJECTED' ? "Yeni Sürücü Seç" : "Sürücü Seç (Tüm Grup)"}
         />
 
         {/* Grup Reddedilmişse Uyarı */}
