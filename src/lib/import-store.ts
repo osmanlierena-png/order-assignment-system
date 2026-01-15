@@ -173,6 +173,11 @@ export async function updateOrderDriver(orderId: string, driverName: string, dat
   if (order) {
     order.driverName = driverName
     order.status = 'ASSIGNED'
+    // Yeni sürücü atandığında önceki red durumunu temizle
+    order.driverResponse = undefined
+    order.driverResponseTime = undefined
+    order.smsSent = false
+    order.smsSentTime = undefined
     await setImportData(data)
     return true
   }
