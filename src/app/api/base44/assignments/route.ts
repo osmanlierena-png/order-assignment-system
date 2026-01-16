@@ -112,8 +112,17 @@ export async function GET(request: NextRequest) {
         console.log(`[ASSIGNMENTS] Grup ${order.groupId} için eksik sürücü tamamlandı: ${driverName}`)
       }
 
-      // Fiyat: önce sipariş fiyatı, yoksa grup fiyatı
-      const effectivePrice = order.price || order.groupPrice || 0
+      // Fiyat Mantığı:
+      // - Gruplu sipariş → groupPrice kullan (grup için toplam fiyat)
+      // - Grupsuz sipariş → order.price kullan (tekil sipariş fiyatı)
+      const effectivePrice = order.groupId
+        ? (order.groupPrice || 0)  // Grup: groupPrice
+        : (order.price || 0)       // Tekil: price
+
+      // Denetim: Grup siparişinde tekil fiyat varsa uyar
+      if (order.groupId && order.price && order.price > 0) {
+        console.warn(`[PRICE-CHECK] Grup siparişinde tekil fiyat tespit edildi: ${order.orderNumber}, price=${order.price}, groupPrice=${order.groupPrice || 0}`)
+      }
 
       return {
         orderId: order.id,

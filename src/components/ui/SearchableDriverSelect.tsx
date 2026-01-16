@@ -95,8 +95,8 @@ export default function SearchableDriverSelect({
         className={`
           w-full text-xs px-3 py-2 rounded-lg border-2 text-left flex items-center justify-between
           ${selectedDriver
-            ? 'bg-green-50 border-green-400 text-green-800 font-semibold'
-            : 'bg-white border-gray-300 text-gray-600 hover:border-purple-400'
+            ? 'bg-green-50 border-green-400 text-black font-semibold'
+            : 'bg-white border-gray-300 text-black hover:border-purple-400'
           }
           focus:outline-none focus:ring-2 focus:ring-purple-400 transition-colors
         `}
@@ -139,7 +139,7 @@ export default function SearchableDriverSelect({
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Sürücü adı ara..."
-              className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:border-purple-400"
+              className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded bg-white text-black focus:outline-none focus:border-purple-400"
               onClick={(e) => e.stopPropagation()}
               onMouseDown={(e) => e.stopPropagation()}
             />
@@ -159,7 +159,7 @@ export default function SearchableDriverSelect({
                   onClick={() => handleSelect(driver)}
                   className={`
                     w-full px-3 py-2 text-left text-xs hover:bg-purple-50 flex items-center justify-between
-                    ${selectedDriver === driver.name ? 'bg-green-50 text-green-800' : 'text-gray-700'}
+                    ${selectedDriver === driver.name ? 'bg-green-50 text-black' : 'text-black'}
                   `}
                 >
                   <span className="font-medium">{driver.name}</span>

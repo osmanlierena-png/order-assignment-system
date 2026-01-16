@@ -126,7 +126,7 @@ function OrderNode({ data, selected }: NodeProps<OrderNodeData>) {
 
       {/* Header - Order No ve Status */}
       <div className="flex items-center justify-between mb-2 pb-2 border-b border-black/10">
-        <div className="font-mono text-xs font-bold text-gray-800 truncate flex-1">
+        <div className="font-mono text-xs font-bold text-black truncate flex-1">
           {data.orderNumber}
         </div>
         <span className={`
@@ -152,7 +152,7 @@ function OrderNode({ data, selected }: NodeProps<OrderNodeData>) {
           )}
           <span className="ml-auto text-xs font-bold text-blue-800">{data.pickupTime}</span>
         </div>
-        <div className="text-[11px] text-gray-700 pl-5 leading-tight" title={data.pickupAddress}>
+        <div className="text-[11px] text-black pl-5 leading-tight" title={data.pickupAddress}>
           {pickup.street}
         </div>
       </div>
@@ -169,7 +169,7 @@ function OrderNode({ data, selected }: NodeProps<OrderNodeData>) {
           )}
           <span className="ml-auto text-xs font-bold text-green-800">{data.dropoffTime}</span>
         </div>
-        <div className="text-[11px] text-gray-700 pl-5 leading-tight" title={data.dropoffAddress}>
+        <div className="text-[11px] text-black pl-5 leading-tight" title={data.dropoffAddress}>
           {dropoff.street}
         </div>
       </div>
@@ -192,11 +192,11 @@ function OrderNode({ data, selected }: NodeProps<OrderNodeData>) {
                 </div>
               </div>
             ) : (
-              <span className="text-gray-400 text-sm">🎁</span>
+              <span className="text-gray-500 text-sm">🎁</span>
             )}
             <span className="text-green-600 text-sm">💰</span>
             <div className="flex items-center flex-1">
-              <span className="text-xs text-gray-600 mr-1">$</span>
+              <span className="text-xs text-black mr-1">$</span>
               <input
                 type="number"
                 value={data.price || ''}
@@ -207,7 +207,7 @@ function OrderNode({ data, selected }: NodeProps<OrderNodeData>) {
                   }
                 }}
                 placeholder="0.00"
-                className="w-20 text-sm px-2 py-1 border border-gray-300 rounded bg-white focus:outline-none focus:ring-1 focus:ring-green-500"
+                className="w-20 text-sm px-2 py-1 border border-gray-300 rounded bg-white text-black focus:outline-none focus:ring-1 focus:ring-green-500"
                 step="0.01"
                 min="0"
               />

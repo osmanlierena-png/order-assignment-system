@@ -341,9 +341,9 @@ function GroupNode({ data }: NodeProps<GroupNodeData>) {
       {/* Grup Fiyatı */}
       <div className="px-3 py-2 bg-gray-50 border-b border-gray-200">
         <div className="flex items-center justify-between">
-          <span className="text-xs font-semibold text-gray-600">Grup Fiyatı:</span>
+          <span className="text-xs font-semibold text-black">Grup Fiyatı:</span>
           <div className="flex items-center gap-2">
-            <span className="text-sm text-gray-600">$</span>
+            <span className="text-sm text-black">$</span>
             <input
               type="number"
               value={data.groupPrice || ''}
@@ -354,7 +354,7 @@ function GroupNode({ data }: NodeProps<GroupNodeData>) {
                 }
               }}
               placeholder="0.00"
-              className="w-24 text-sm px-2 py-1 border border-gray-300 rounded bg-white focus:outline-none focus:ring-1 focus:ring-purple-500 font-bold"
+              className="w-24 text-sm px-2 py-1 border border-gray-300 rounded bg-white text-black focus:outline-none focus:ring-1 focus:ring-purple-500 font-bold"
               step="0.01"
               min="0"
             />
@@ -485,7 +485,7 @@ function GroupNode({ data }: NodeProps<GroupNodeData>) {
                 <div className="pl-4">
                   {/* Order number + Time Slot (MIXED durumunda) + Tip Tooltip */}
                   <div className="flex items-center gap-2 mb-1">
-                    <span className="font-mono text-[10px] text-gray-500 truncate">
+                    <span className="font-mono text-[10px] text-black truncate">
                       {order.orderNumber}
                     </span>
                     {/* Tip ikonu - hover'da tooltip */}
@@ -522,7 +522,7 @@ function GroupNode({ data }: NodeProps<GroupNodeData>) {
                         {pickupZip}
                       </span>
                     )}
-                    <span className="text-[9px] text-gray-600 truncate" title={order.pickupAddress}>
+                    <span className="text-[9px] text-black truncate" title={order.pickupAddress}>
                       {shortenAddress(order.pickupAddress)}
                     </span>
                   </div>
@@ -535,7 +535,7 @@ function GroupNode({ data }: NodeProps<GroupNodeData>) {
                         {dropoffZip}
                       </span>
                     )}
-                    <span className="text-[9px] text-gray-600 truncate" title={order.dropoffAddress}>
+                    <span className="text-[9px] text-black truncate" title={order.dropoffAddress}>
                       {shortenAddress(order.dropoffAddress)}
                     </span>
                   </div>
