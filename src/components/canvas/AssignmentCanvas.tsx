@@ -766,13 +766,20 @@ function AssignmentCanvasInner({
     let groupCount = 0
 
     orders.forEach(order => {
+      // REDDEDİLEN siparişleri toplama dahil etme
+      if (order.driverResponse === 'REJECTED') return
+
       if (order.groupId) {
         // Grup zaten işlendiyse atla
         if (processedGroupIds.has(order.groupId)) return
         processedGroupIds.add(order.groupId)
 
-        // Gruptaki siparişleri kontrol et
-        const groupOrders = orders.filter(o => o.groupId === order.groupId)
+        // Gruptaki siparişleri kontrol et (reddedilmemiş olanlar)
+        const groupOrders = orders.filter(o => o.groupId === order.groupId && o.driverResponse !== 'REJECTED')
+
+        // Tüm grup reddedildiyse atla
+        if (groupOrders.length === 0) return
+
         const isGroupAssigned = groupOrders.some(o => !!o.driver)
 
         // Grup fiyatı: groupPrice veya ilk siparişin price'ı
