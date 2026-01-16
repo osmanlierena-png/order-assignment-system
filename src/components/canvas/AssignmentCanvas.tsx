@@ -447,21 +447,21 @@ function AssignmentCanvasInner({
     const columnHeaders = [
       {
         id: 'header-morning',
-        label: '🌅 Sabah (06:00-12:00)',
+        label: '🌅 Sabah (04:00-09:00)',
         x: ORDER_START_X,
         count: filteredOrders.filter(o => o.timeSlot === 'MORNING').length,
         gradient: 'linear-gradient(135deg, #f59e0b 0%, #ea580c 100%)' // Turuncu-amber
       },
       {
         id: 'header-afternoon',
-        label: '☀️ Öğlen (12:00-17:00)',
+        label: '☀️ Öğlen (09:00-12:00)',
         x: ORDER_START_X + COLUMN_WIDTH,
         count: filteredOrders.filter(o => o.timeSlot === 'AFTERNOON').length,
         gradient: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)' // Mavi
       },
       {
         id: 'header-evening',
-        label: '🌙 Akşam (17:00-23:00)',
+        label: '🌙 Akşam (12:00+)',
         x: ORDER_START_X + COLUMN_WIDTH * 2,
         count: filteredOrders.filter(o => o.timeSlot === 'EVENING').length,
         gradient: 'linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%)' // Mor-violet

@@ -43,7 +43,7 @@ export interface ImportedOrder {
   driverPhone?: string
   timeSlot?: string
   groupId?: string | null
-  groupSource?: 'system' | 'manual'  // Grup kaynağı
+  groupSource?: 'system' | 'manual' | 'auto-driver'  // Grup kaynağı (auto-driver = aynı sürücüye atama sonucu otomatik grup)
   price?: number          // Sipariş fiyatı ($)
   groupPrice?: number     // Grup fiyatı (grup içindeki ilk siparişte tutulur)
   tipAmount?: number      // Tip miktarı (Base44 OCR'dan)

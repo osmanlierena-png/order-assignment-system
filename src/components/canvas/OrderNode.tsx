@@ -129,15 +129,31 @@ function OrderNode({ data, selected }: NodeProps<OrderNodeData>) {
         <div className="font-mono text-xs font-bold text-black truncate flex-1">
           {data.orderNumber}
         </div>
-        <span className={`
-          text-[10px] px-2 py-0.5 rounded-full font-medium
-          ${data.status === 'PENDING' ? 'bg-yellow-400/80 text-yellow-900' : ''}
-          ${data.status === 'ASSIGNED' ? 'bg-green-400/80 text-green-900' : ''}
-          ${data.status === 'IN_TRANSIT' ? 'bg-blue-400/80 text-blue-900' : ''}
-          ${data.status === 'DELIVERED' ? 'bg-gray-400/80 text-gray-900' : ''}
-        `}>
-          {STATUS_LABELS[data.status] || data.status}
-        </span>
+        {/* Status mantığı:
+            - Sürücü var → ASSIGNED (Atandı)
+            - Sürücü yok + SMS gönderilmiş → PENDING (Beklemede)
+            - Sürücü yok + SMS gönderilmemiş → UNASSIGNED (Atanmadı)
+        */}
+        {(() => {
+          let effectiveStatus = 'UNASSIGNED'
+          if (data.driver) {
+            effectiveStatus = 'ASSIGNED'
+          } else if (data.smsSent) {
+            effectiveStatus = 'PENDING'
+          }
+          return (
+            <span className={`
+              text-[10px] px-2 py-0.5 rounded-full font-medium
+              ${effectiveStatus === 'UNASSIGNED' ? 'bg-red-400/80 text-red-900' : ''}
+              ${effectiveStatus === 'PENDING' ? 'bg-yellow-400/80 text-yellow-900' : ''}
+              ${effectiveStatus === 'ASSIGNED' ? 'bg-green-400/80 text-green-900' : ''}
+              ${data.status === 'IN_TRANSIT' ? 'bg-blue-400/80 text-blue-900' : ''}
+              ${data.status === 'DELIVERED' ? 'bg-gray-400/80 text-gray-900' : ''}
+            `}>
+              {STATUS_LABELS[effectiveStatus] || effectiveStatus}
+            </span>
+          )
+        })()}
       </div>
 
       {/* Pickup */}

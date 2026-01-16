@@ -10,9 +10,9 @@ const MIN_BUFFER_MINUTES = 5
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { sourceOrderId, targetOrderId, targetGroupId, date } = body
+    const { sourceOrderId, targetOrderId, targetGroupId, date, autoGroup, combinedPrice } = body
 
-    console.log('[GROUP API] Birleştirme isteği:', { sourceOrderId, targetOrderId, targetGroupId, date })
+    console.log('[GROUP API] Birleştirme isteği:', { sourceOrderId, targetOrderId, targetGroupId, date, autoGroup, combinedPrice })
 
     // Tarih belirle
     const targetDate = date || await getLatestDate()
@@ -93,10 +93,22 @@ export async function POST(request: NextRequest) {
       // Hedefin mevcut grubu varsa onu kullan, yoksa yeni oluştur
       groupId = targetOrder.groupId || generateId()
       sourceOrder.groupId = groupId
-      sourceOrder.groupSource = 'manual' // Kullanıcı birleştirdi
+      sourceOrder.groupSource = autoGroup ? 'auto-driver' : 'manual' // Otomatik mı manuel mi?
       targetOrder.groupId = groupId
-      targetOrder.groupSource = 'manual' // Kullanıcı birleştirdi
-      console.log(`[GROUP API] Siparişler birleştirildi: ${sourceOrderId} + ${targetOrderId} → ${groupId}`)
+      targetOrder.groupSource = autoGroup ? 'auto-driver' : 'manual' // Otomatik mı manuel mi?
+
+      // OTOMATIK GRUPLAMA: Fiyatları birleştir
+      if (autoGroup && combinedPrice !== undefined) {
+        // Tekil fiyatları sıfırla
+        sourceOrder.price = 0
+        targetOrder.price = 0
+        // Grup fiyatını ayarla
+        sourceOrder.groupPrice = combinedPrice
+        targetOrder.groupPrice = combinedPrice
+        console.log(`[GROUP API] Otomatik gruplama fiyat birleştirme: groupPrice = $${combinedPrice}`)
+      }
+
+      console.log(`[GROUP API] Siparişler birleştirildi: ${sourceOrderId} + ${targetOrderId} → ${groupId} (${autoGroup ? 'otomatik' : 'manuel'})`)
     }
     else {
       return NextResponse.json(

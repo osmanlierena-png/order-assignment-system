@@ -8,9 +8,10 @@ export const TIME_SLOTS = {
 
 // Durum etiketleri
 export const STATUS_LABELS: Record<string, string> = {
-  PENDING: 'Beklemede',
-  ASSIGNED: 'Atandı',
-  CONFIRMED: 'Onaylandı',
+  UNASSIGNED: 'Atanmadı',      // Sürücü seçilmedi
+  PENDING: 'Beklemede',        // SMS gönderildi, yanıt bekleniyor
+  ASSIGNED: 'Atandı',          // Sürücü atandı
+  CONFIRMED: 'Onaylandı',      // Sürücü onayladı
   IN_TRANSIT: 'Yolda',
   DELIVERED: 'Teslim Edildi',
   CANCELLED: 'İptal',

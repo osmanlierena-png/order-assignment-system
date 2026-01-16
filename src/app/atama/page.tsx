@@ -295,12 +295,144 @@ export default function AtamaPage() {
     runAutoMerge()
   }, [orders, loading, autoMerging, fetchData])
 
-  // Sipariş ataması
+  // Sipariş ataması - Aynı sürücüye 2. sipariş atanırsa otomatik gruplama yapar
   const handleAssign = async (orderId: string, driverName: string) => {
     // Önceki değeri sakla (geri alma için)
     const previousOrder = orders.find(o => o.id === orderId)
 
-    // Optimistik güncelleme - önce UI'ı güncelle
+    // Atama silme (boş driverName)
+    if (!driverName) {
+      setOrders(prev =>
+        prev.map(o => (o.id === orderId ? { ...o, driver: null, status: 'PENDING' } : o))
+      )
+
+      try {
+        const response = await fetch(`/api/orders/${orderId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            driver: null,
+            status: 'PENDING',
+            date: selectedDate
+          }),
+        })
+
+        if (!response.ok) {
+          if (previousOrder) {
+            setOrders(prev =>
+              prev.map(o => (o.id === orderId ? previousOrder : o))
+            )
+          }
+        }
+      } catch (error) {
+        console.error('Atama silme hatası:', error)
+      }
+      return
+    }
+
+    // OTOMATIK GRUPLAMA: Bu sürücüye atanmış başka tekil sipariş var mı kontrol et
+    const currentOrder = orders.find(o => o.id === orderId)
+    const otherOrdersWithSameDriver = orders.filter(o =>
+      o.id !== orderId &&           // Kendisi değil
+      o.driver === driverName &&    // Aynı sürücü
+      !o.groupId                    // Tekil (grupta değil)
+    )
+
+    // Eğer bu sipariş tekil VE başka tekil sipariş(ler) aynı sürücüye atanmışsa → OTOMATİK GRUPLAMA
+    if (!currentOrder?.groupId && otherOrdersWithSameDriver.length > 0) {
+      console.log(`[AUTO-GROUP] ${driverName} için otomatik gruplama: ${orderId} + ${otherOrdersWithSameDriver.map(o => o.id).join(', ')}`)
+
+      // Önce mevcut siparişi ata
+      setOrders(prev =>
+        prev.map(o => (o.id === orderId ? { ...o, driver: driverName, status: 'ASSIGNED' } : o))
+      )
+
+      try {
+        // Sipariş atamasını yap
+        const assignResponse = await fetch(`/api/orders/${orderId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            driver: driverName,
+            status: 'ASSIGNED',
+            date: selectedDate
+          }),
+        })
+
+        if (!assignResponse.ok) {
+          if (previousOrder) {
+            setOrders(prev =>
+              prev.map(o => (o.id === orderId ? previousOrder : o))
+            )
+          }
+          throw new Error('Atama başarısız')
+        }
+
+        // Şimdi otomatik gruplama yap
+        // İlk olarak, bu sipariş ile ilk eşleşeni birleştir
+        const firstMatch = otherOrdersWithSameDriver[0]
+
+        // Fiyatları hesapla: groupPrice = her iki siparişin fiyatı toplamı
+        const currentPrice = currentOrder?.price || 0
+        const firstMatchPrice = firstMatch.price || 0
+        const combinedPrice = currentPrice + firstMatchPrice
+
+        // Birleştirme API çağrısı
+        const mergeResponse = await fetch('/api/orders/group', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            sourceOrderId: orderId,
+            targetOrderId: firstMatch.id,
+            targetGroupId: null,
+            date: selectedDate,
+            // Otomatik gruplama için: fiyatları sıfırla, groupPrice'a aktar
+            autoGroup: true,
+            combinedPrice: combinedPrice
+          }),
+        })
+
+        const mergeData = await mergeResponse.json()
+
+        if (mergeResponse.ok && mergeData.groupId) {
+          // Diğer eşleşen siparişleri de gruba ekle (varsa)
+          for (let i = 1; i < otherOrdersWithSameDriver.length; i++) {
+            const additionalOrder = otherOrdersWithSameDriver[i]
+            await fetch('/api/orders/group', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                sourceOrderId: additionalOrder.id,
+                targetOrderId: null,
+                targetGroupId: mergeData.groupId,
+                date: selectedDate
+              }),
+            })
+          }
+
+          // Verileri yeniden yükle
+          await fetchData(selectedDate || undefined)
+
+          setMessage({
+            type: 'success',
+            text: `${driverName} için otomatik grup oluşturuldu (${otherOrdersWithSameDriver.length + 1} sipariş) - Grup Fiyatı: $${combinedPrice}`
+          })
+          setTimeout(() => setMessage(null), 5000)
+        } else {
+          // Gruplama başarısız ama atama yapıldı
+          setMessage({ type: 'success', text: `Sipariş ${driverName}'e atandı (gruplama başarısız)` })
+          setTimeout(() => setMessage(null), 3000)
+        }
+
+      } catch (error) {
+        console.error('Otomatik gruplama hatası:', error)
+        setMessage({ type: 'error', text: 'Atama başarısız oldu' })
+      }
+
+      return
+    }
+
+    // Normal atama (otomatik gruplama yok)
     setOrders(prev =>
       prev.map(o => (o.id === orderId ? { ...o, driver: driverName, status: 'ASSIGNED' } : o))
     )
