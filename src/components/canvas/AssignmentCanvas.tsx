@@ -39,6 +39,7 @@ interface Order {
   groupPrice?: number     // Grup fiyatı
   tipAmount?: number      // Tip miktarı (Base44 OCR'dan)
   priceAmount?: number    // Toplam fiyat (Base44 OCR'dan)
+  isHighValue?: boolean   // Büyük sipariş ($500+)
   driverResponse?: 'ACCEPTED' | 'REJECTED' | null  // Sürücü yanıtı
   driverResponseTime?: string                       // Yanıt zamanı
   smsSent?: boolean                                  // SMS gönderildi mi?
@@ -490,6 +491,7 @@ function AssignmentCanvasInner({
             price: o.price,
             tipAmount: o.tipAmount,           // Tip miktarı
             priceAmount: o.priceAmount,       // Toplam fiyat
+            isHighValue: o.isHighValue || (o.priceAmount && o.priceAmount >= 500),  // Büyük sipariş
             driverResponse: o.driverResponse,      // Sürücü yanıtı
             driverResponseTime: o.driverResponseTime,
             smsSent: o.smsSent,                    // SMS gönderildi mi?
@@ -536,6 +538,7 @@ function AssignmentCanvasInner({
           price: order.price,
           tipAmount: order.tipAmount,           // Tip miktarı
           priceAmount: order.priceAmount,       // Toplam fiyat
+          isHighValue: order.isHighValue || (order.priceAmount && order.priceAmount >= 500),  // Büyük sipariş
           driverResponse: order.driverResponse,      // Sürücü yanıtı
           driverResponseTime: order.driverResponseTime,
           smsSent: order.smsSent,                    // SMS gönderildi mi?
