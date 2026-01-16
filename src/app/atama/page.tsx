@@ -830,6 +830,12 @@ export default function AtamaPage() {
         onMergeOrders={handleMergeOrders}
         onPriceChange={handlePriceChange}
         onGroupPriceChange={handleGroupPriceChange}
+        onDriverAdded={async () => {
+          // Sürücü listesini yeniden yükle
+          const driversRes = await fetch('/api/drivers')
+          const driversData = await driversRes.json()
+          setDrivers(driversData)
+        }}
       />
     </div>
   )

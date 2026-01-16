@@ -366,3 +366,89 @@ export async function clearNodePositions(date?: string | Date): Promise<void> {
     }
   }
 }
+
+// ==========================================
+// SÜRÜCÜ YÖNETİMİ (Custom drivers)
+// ==========================================
+
+const DRIVERS_KEY = 'canvas:custom-drivers'
+
+export interface CustomDriver {
+  id: string
+  name: string
+  phone: string | null
+  createdAt: string
+}
+
+// Custom sürücüleri getir
+export async function getCustomDrivers(): Promise<CustomDriver[]> {
+  if (isRedisConfigured()) {
+    try {
+      const data = await redis.get<string>(DRIVERS_KEY)
+      if (data) {
+        const parsed = typeof data === 'string' ? JSON.parse(data) : data
+        console.log(`[DRIVERS] ${parsed.length} custom sürücü Redis'ten okundu`)
+        return parsed as CustomDriver[]
+      }
+    } catch (error) {
+      console.error('[DRIVERS] Redis okuma hatası:', error)
+    }
+  }
+  return []
+}
+
+// Custom sürücü ekle
+export async function addCustomDriver(name: string, phone?: string): Promise<CustomDriver | null> {
+  const drivers = await getCustomDrivers()
+
+  // Aynı isimde sürücü var mı kontrol et
+  if (drivers.some(d => d.name.toLowerCase() === name.toLowerCase())) {
+    console.log(`[DRIVERS] Sürücü zaten mevcut: ${name}`)
+    return null
+  }
+
+  const newDriver: CustomDriver = {
+    id: `custom-${Date.now()}`,
+    name: name.trim(),
+    phone: phone || null,
+    createdAt: new Date().toISOString()
+  }
+
+  drivers.push(newDriver)
+
+  if (isRedisConfigured()) {
+    try {
+      await redis.set(DRIVERS_KEY, JSON.stringify(drivers))
+      console.log(`[DRIVERS] Yeni sürücü Redis'e eklendi: ${name}`)
+      return newDriver
+    } catch (error) {
+      console.error('[DRIVERS] Redis kayıt hatası:', error)
+      return null
+    }
+  }
+
+  return newDriver
+}
+
+// Custom sürücü sil
+export async function removeCustomDriver(driverId: string): Promise<boolean> {
+  const drivers = await getCustomDrivers()
+  const filtered = drivers.filter(d => d.id !== driverId)
+
+  if (filtered.length === drivers.length) {
+    return false // Sürücü bulunamadı
+  }
+
+  if (isRedisConfigured()) {
+    try {
+      await redis.set(DRIVERS_KEY, JSON.stringify(filtered))
+      console.log(`[DRIVERS] Sürücü silindi: ${driverId}`)
+      return true
+    } catch (error) {
+      console.error('[DRIVERS] Redis silme hatası:', error)
+      return false
+    }
+  }
+
+  return true
+}

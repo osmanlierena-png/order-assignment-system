@@ -70,6 +70,7 @@ interface AssignmentCanvasProps {
   onMergeOrders?: (sourceOrderId: string, targetOrderId: string | null, targetGroupId: string | null) => void
   onPriceChange?: (orderId: string, price: number) => void
   onGroupPriceChange?: (groupId: string, groupPrice: number) => void
+  onDriverAdded?: () => void  // Yeni sürücü eklendiğinde tetiklenir
 }
 
 function AssignmentCanvasInner({
@@ -83,6 +84,7 @@ function AssignmentCanvasInner({
   onMergeOrders,
   onPriceChange,
   onGroupPriceChange,
+  onDriverAdded,
 }: AssignmentCanvasProps) {
   const [nodes, setNodes, onNodesChange] = useNodesState([])
   const [edges, setEdges, onEdgesChange] = useEdgesState([])
@@ -108,6 +110,13 @@ function AssignmentCanvasInner({
   const [showSecretTips, setShowSecretTips] = useState<boolean>(false)
   const secretClickCount = useRef<number>(0)
   const secretClickTimer = useRef<NodeJS.Timeout | null>(null)
+
+  // Sürücü ekleme modal state'leri
+  const [showAddDriverModal, setShowAddDriverModal] = useState<boolean>(false)
+  const [newDriverName, setNewDriverName] = useState<string>('')
+  const [newDriverPhone, setNewDriverPhone] = useState<string>('')
+  const [addDriverLoading, setAddDriverLoading] = useState<boolean>(false)
+  const [addDriverError, setAddDriverError] = useState<string | null>(null)
 
   // useReactFlow hook - güncel node'ları almak için
   const { getNodes, fitView, setCenter } = useReactFlow()
@@ -204,6 +213,46 @@ function AssignmentCanvasInner({
       secretClickCount.current = 0
     }, 1000)
   }, [])
+
+  // Yeni sürücü ekle
+  const handleAddDriver = useCallback(async () => {
+    if (!newDriverName.trim()) {
+      setAddDriverError('Sürücü adı gerekli')
+      return
+    }
+
+    setAddDriverLoading(true)
+    setAddDriverError(null)
+
+    try {
+      const response = await fetch('/api/drivers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: newDriverName.trim(),
+          phone: newDriverPhone.trim() || null
+        })
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        setAddDriverError(data.error || 'Sürücü eklenemedi')
+        return
+      }
+
+      // Başarılı - modal'ı kapat ve listeyi yenile
+      setShowAddDriverModal(false)
+      setNewDriverName('')
+      setNewDriverPhone('')
+      onDriverAdded?.()
+    } catch (error) {
+      console.error('Sürücü ekleme hatası:', error)
+      setAddDriverError('Bağlantı hatası')
+    } finally {
+      setAddDriverLoading(false)
+    }
+  }, [newDriverName, newDriverPhone, onDriverAdded])
 
   // Sayfa yüklendiğinde pozisyonları Redis'ten al
   useEffect(() => {
@@ -967,6 +1016,14 @@ function AssignmentCanvasInner({
           <span className="text-gray-600">
             💵 <b className="text-green-600">${paymentStats.totalPayment.toFixed(2)}</b> toplam ödeme
           </span>
+          <span className="text-gray-400">|</span>
+          <button
+            onClick={() => setShowAddDriverModal(true)}
+            className="bg-blue-500 hover:bg-blue-600 text-white px-2 py-0.5 rounded text-xs font-medium transition-colors"
+            title="Yeni sürücü ekle"
+          >
+            + Sürücü
+          </button>
           </div>
 
           {/* Gizli Toplam Tip Gösterimi - "erentip" yazınca görünür */}
@@ -994,6 +1051,86 @@ function AssignmentCanvasInner({
           </div>
         </Panel>
       </ReactFlow>
+
+      {/* Sürücü Ekleme Modal */}
+      {showAddDriverModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-2xl p-6 w-96 max-w-[90vw]">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-bold text-gray-800">Yeni Sürücü Ekle</h3>
+              <button
+                onClick={() => {
+                  setShowAddDriverModal(false)
+                  setNewDriverName('')
+                  setNewDriverPhone('')
+                  setAddDriverError(null)
+                }}
+                className="text-gray-400 hover:text-gray-600 text-xl"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Sürücü Adı *
+                </label>
+                <input
+                  type="text"
+                  value={newDriverName}
+                  onChange={(e) => setNewDriverName(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleAddDriver()}
+                  placeholder="Örn: Ahmet Yılmaz"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  autoFocus
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Telefon (opsiyonel)
+                </label>
+                <input
+                  type="tel"
+                  value={newDriverPhone}
+                  onChange={(e) => setNewDriverPhone(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleAddDriver()}
+                  placeholder="Örn: +1 555 123 4567"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+
+              {addDriverError && (
+                <div className="bg-red-50 border border-red-200 text-red-600 px-3 py-2 rounded-lg text-sm">
+                  {addDriverError}
+                </div>
+              )}
+
+              <div className="flex gap-3 pt-2">
+                <button
+                  onClick={() => {
+                    setShowAddDriverModal(false)
+                    setNewDriverName('')
+                    setNewDriverPhone('')
+                    setAddDriverError(null)
+                  }}
+                  className="flex-1 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg font-medium transition-colors"
+                >
+                  İptal
+                </button>
+                <button
+                  onClick={handleAddDriver}
+                  disabled={addDriverLoading || !newDriverName.trim()}
+                  className="flex-1 px-4 py-2 bg-blue-500 hover:bg-blue-600 disabled:bg-blue-300 text-white rounded-lg font-medium transition-colors"
+                >
+                  {addDriverLoading ? 'Ekleniyor...' : 'Ekle'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
