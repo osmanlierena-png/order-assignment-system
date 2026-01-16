@@ -707,6 +707,59 @@ function AssignmentCanvasInner({
     return { assigned, unassigned }
   }, [orders])
 
+  // Toplam sürücü ödemelerini hesapla
+  const paymentStats = useMemo(() => {
+    const processedGroupIds = new Set<string>()
+    let totalPayment = 0
+    let assignedPayment = 0
+    let pendingPayment = 0
+    let orderCount = 0
+    let groupCount = 0
+
+    orders.forEach(order => {
+      if (order.groupId) {
+        // Grup zaten işlendiyse atla
+        if (processedGroupIds.has(order.groupId)) return
+        processedGroupIds.add(order.groupId)
+
+        // Gruptaki siparişleri kontrol et
+        const groupOrders = orders.filter(o => o.groupId === order.groupId)
+        const isGroupAssigned = groupOrders.some(o => !!o.driver)
+
+        // Grup fiyatı: groupPrice veya ilk siparişin price'ı
+        const groupPayment = groupOrders[0]?.groupPrice || groupOrders[0]?.price || 0
+
+        totalPayment += groupPayment
+        groupCount++
+
+        if (isGroupAssigned) {
+          assignedPayment += groupPayment
+        } else {
+          pendingPayment += groupPayment
+        }
+      } else {
+        // Tekil sipariş
+        const payment = order.price || 0
+        totalPayment += payment
+        orderCount++
+
+        if (order.driver) {
+          assignedPayment += payment
+        } else {
+          pendingPayment += payment
+        }
+      }
+    })
+
+    return {
+      totalPayment,
+      assignedPayment,
+      pendingPayment,
+      orderCount,
+      groupCount
+    }
+  }, [orders])
+
   return (
     <div className="w-full h-[calc(100vh-120px)] min-h-[600px] bg-gray-50 rounded-xl border border-gray-200 shadow-lg">
       <ReactFlow
@@ -910,6 +963,31 @@ function AssignmentCanvasInner({
               </span>
             </>
           )}
+          </div>
+
+          {/* Toplam Sürücü Ödemeleri */}
+          <div className="bg-gradient-to-r from-green-50 to-emerald-50 border border-green-300 px-4 py-2 rounded-lg shadow-md flex items-center gap-3">
+            <span className="text-green-600 text-lg">💵</span>
+            <div className="flex items-center gap-2">
+              <span className="text-green-800 font-bold text-sm">
+                ${paymentStats.totalPayment.toFixed(2)}
+              </span>
+              <span className="text-green-600 text-xs">toplam</span>
+            </div>
+            <span className="text-gray-300">|</span>
+            <div className="flex items-center gap-1">
+              <span className="text-emerald-700 font-semibold text-xs">
+                ${paymentStats.assignedPayment.toFixed(2)}
+              </span>
+              <span className="text-emerald-500 text-[10px]">atanmış</span>
+            </div>
+            <span className="text-gray-300">|</span>
+            <div className="flex items-center gap-1">
+              <span className="text-orange-600 font-semibold text-xs">
+                ${paymentStats.pendingPayment.toFixed(2)}
+              </span>
+              <span className="text-orange-500 text-[10px]">bekleyen</span>
+            </div>
           </div>
 
           {/* Gizli Toplam Tip Gösterimi - "erentip" yazınca görünür */}
