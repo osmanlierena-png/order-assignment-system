@@ -963,31 +963,10 @@ function AssignmentCanvasInner({
               </span>
             </>
           )}
-          </div>
-
-          {/* Toplam Sürücü Ödemeleri */}
-          <div className="bg-gradient-to-r from-green-50 to-emerald-50 border border-green-300 px-4 py-2 rounded-lg shadow-md flex items-center gap-3">
-            <span className="text-green-600 text-lg">💵</span>
-            <div className="flex items-center gap-2">
-              <span className="text-green-800 font-bold text-sm">
-                ${paymentStats.totalPayment.toFixed(2)}
-              </span>
-              <span className="text-green-600 text-xs">toplam</span>
-            </div>
-            <span className="text-gray-300">|</span>
-            <div className="flex items-center gap-1">
-              <span className="text-emerald-700 font-semibold text-xs">
-                ${paymentStats.assignedPayment.toFixed(2)}
-              </span>
-              <span className="text-emerald-500 text-[10px]">atanmış</span>
-            </div>
-            <span className="text-gray-300">|</span>
-            <div className="flex items-center gap-1">
-              <span className="text-orange-600 font-semibold text-xs">
-                ${paymentStats.pendingPayment.toFixed(2)}
-              </span>
-              <span className="text-orange-500 text-[10px]">bekleyen</span>
-            </div>
+          <span className="text-gray-400">|</span>
+          <span className="text-gray-600">
+            💵 <b className="text-green-600">${paymentStats.totalPayment.toFixed(2)}</b> toplam ödeme
+          </span>
           </div>
 
           {/* Gizli Toplam Tip Gösterimi - "erentip" yazınca görünür */}
