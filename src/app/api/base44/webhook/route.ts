@@ -152,12 +152,18 @@ export async function POST(request: NextRequest) {
         )
       }
 
-      // Siparişi bul
-      const orderIndex = data.orders.findIndex(o => o.id === responsePayload.orderId)
+      // Siparişi bul - orderNumber ile eşleştir (Canvas ve Base44'te ortak alan)
+      let orderIndex = data.orders.findIndex(o => o.orderNumber === responsePayload.orderNumber)
+
+      // orderNumber bulunamazsa orderId ile dene (fallback)
       if (orderIndex === -1) {
-        console.error(`[WEBHOOK] Order not found: ${responsePayload.orderId}`)
+        orderIndex = data.orders.findIndex(o => o.id === responsePayload.orderId)
+      }
+
+      if (orderIndex === -1) {
+        console.error(`[WEBHOOK] Order not found: orderNumber=${responsePayload.orderNumber}, orderId=${responsePayload.orderId}`)
         return NextResponse.json(
-          { error: `Order not found: ${responsePayload.orderId}` },
+          { error: `Order not found: ${responsePayload.orderNumber}` },
           { status: 404, headers: corsHeaders }
         )
       }
