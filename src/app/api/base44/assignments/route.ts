@@ -151,7 +151,9 @@ export async function GET(request: NextRequest) {
         isGroupPrimary,  // true = bu sipariş grup fiyatını taşıyor (SMS'te kullan)
         offer: effectivePrice,  // Alternatif alan adı
         driverPayment: effectivePrice,  // Başka alternatif
-        status: driverName ? 'ASSIGNED' : (order.status || 'PENDING'),
+        status: order.driverResponse === 'ACCEPTED' ? 'CONFIRMED'
+              : driverName ? 'ASSIGNED'
+              : (order.status || 'PENDING'),
         // Ek bilgiler (Base44'ün ihtiyacı olabilir)
         pickupTime: order.pickupTime,
         dropoffTime: order.dropoffTime,
