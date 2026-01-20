@@ -17,6 +17,12 @@ const TTL = 60 * 60 * 24 * 30 // 30 gün (geçmiş verilere erişim için)
 
 // Tarih formatı: YYYY-MM-DD (America/New_York timezone - Washington DC)
 function formatDateKey(date: string | Date): string {
+  // YYYY-MM-DD formatında string ise direkt döndür (timezone dönüşümü YAPMA)
+  // Bu önemli çünkü "2025-05-07" → new Date() → UTC gece yarısı → Eastern'da önceki gün olur
+  if (typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    return date
+  }
+
   const d = typeof date === 'string' ? new Date(date) : date
 
   // UTC yerine Eastern Time (Washington DC) kullan
