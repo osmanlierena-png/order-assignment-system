@@ -465,6 +465,18 @@ export default function AtamaPage() {
             }),
           })
 
+          // FİYAT TOPLAMA: Mevcut grubun fiyatını al
+          const currentGroupOrders = orders.filter(o => o.groupId === currentOrder.groupId)
+          let totalGroupPrice = currentGroupOrders[0]?.groupPrice || 0
+
+          // Diğer grupların fiyatlarını topla
+          for (const otherGroupId of uniqueGroupIds) {
+            const otherGroupOrders = orders.filter(o => o.groupId === otherGroupId)
+            const otherGroupPrice = otherGroupOrders[0]?.groupPrice || 0
+            totalGroupPrice += otherGroupPrice
+            console.log(`[AUTO-GROUP-MERGE] Fiyat eklendi: +$${otherGroupPrice} (toplam: $${totalGroupPrice})`)
+          }
+
           // Diğer grupları bu gruba birleştir
           let mergedOrderCount = 0
           for (const otherGroupId of uniqueGroupIds) {
@@ -484,12 +496,26 @@ export default function AtamaPage() {
             }
           }
 
+          // Toplanan fiyatı gruba kaydet
+          if (totalGroupPrice > 0) {
+            await fetch('/api/orders/price', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                groupId: currentOrder.groupId,
+                groupPrice: totalGroupPrice,
+                date: selectedDate
+              }),
+            })
+            console.log(`[AUTO-GROUP-MERGE] Toplam grup fiyatı kaydedildi: $${totalGroupPrice}`)
+          }
+
           // Verileri yeniden yükle
           await fetchData(selectedDate || undefined)
 
           setMessage({
             type: 'success',
-            text: `${driverName} için ${uniqueGroupIds.length} grup birleştirildi (${mergedOrderCount} sipariş eklendi)`
+            text: `${driverName} için ${uniqueGroupIds.length} grup birleştirildi (${mergedOrderCount} sipariş, toplam $${totalGroupPrice})`
           })
           setTimeout(() => setMessage(null), 5000)
 

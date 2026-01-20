@@ -1,15 +1,36 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { updateOrderPrice } from '@/lib/import-store'
+import { updateOrderPrice, updateGroupPrice } from '@/lib/import-store'
 
-// POST - Sipariş fiyatını güncelle
+// POST - Sipariş veya grup fiyatını güncelle
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { orderId, price, date } = body
+    const { orderId, groupId, price, groupPrice, date } = body
 
+    // Grup fiyatı güncelleme
+    if (groupId && groupPrice !== undefined) {
+      const success = await updateGroupPrice(groupId, groupPrice, date)
+
+      if (success) {
+        console.log(`[PRICE API] Grup fiyatı güncellendi: ${groupId} → $${groupPrice}`)
+        return NextResponse.json({
+          success: true,
+          message: 'Grup fiyatı güncellendi',
+          groupId,
+          groupPrice
+        })
+      }
+
+      return NextResponse.json(
+        { error: 'Grup bulunamadı' },
+        { status: 404 }
+      )
+    }
+
+    // Tekil sipariş fiyatı güncelleme
     if (!orderId || price === undefined) {
       return NextResponse.json(
-        { error: 'orderId ve price gerekli' },
+        { error: 'orderId ve price (veya groupId ve groupPrice) gerekli' },
         { status: 400 }
       )
     }
