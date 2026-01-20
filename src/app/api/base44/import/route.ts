@@ -218,17 +218,26 @@ export async function POST(request: NextRequest) {
     // ==========================================
     // MERGE: Mevcut siparişleri koru, yenileri ekle
     // ==========================================
-    // America/New_York timezone ile tarih key oluştur (import-store ile tutarlı)
-    const dateOptions: Intl.DateTimeFormatOptions = {
-      timeZone: 'America/New_York',
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit'
-    }
-    const dateParts = new Intl.DateTimeFormat('en-CA', dateOptions).formatToParts(orderDate)
-    const dateKey = `${dateParts.find(p => p.type === 'year')?.value}-${dateParts.find(p => p.type === 'month')?.value}-${dateParts.find(p => p.type === 'day')?.value}`
+    // Base44 YYYY-MM-DD formatında gönderiyorsa direkt kullan
+    // Aksi halde America/New_York timezone ile hesapla
+    let dateKey: string
 
-    console.log(`[BASE44 IMPORT] Tarih key: ${dateKey} (Base44 gönderdi: ${date})`)
+    if (date && /^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      // Base44 zaten YYYY-MM-DD formatında gönderiyor - direkt kullan
+      dateKey = date
+      console.log(`[BASE44 IMPORT] Tarih key (direkt): ${dateKey}`)
+    } else {
+      // ISO timestamp veya başka format - timezone ile hesapla
+      const dateOptions: Intl.DateTimeFormatOptions = {
+        timeZone: 'America/New_York',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+      }
+      const dateParts = new Intl.DateTimeFormat('en-CA', dateOptions).formatToParts(orderDate)
+      dateKey = `${dateParts.find(p => p.type === 'year')?.value}-${dateParts.find(p => p.type === 'month')?.value}-${dateParts.find(p => p.type === 'day')?.value}`
+      console.log(`[BASE44 IMPORT] Tarih key (hesaplandı): ${dateKey} (Base44 gönderdi: ${date})`)
+    }
     const existingData = await getImportData(dateKey)
     const existingOrders = existingData?.orders || []
     const existingDrivers = existingData?.drivers || []
