@@ -253,12 +253,13 @@ export async function POST(request: NextRequest) {
     const mergedDrivers = [...existingDrivers, ...newDrivers]
 
     // Global store'a kaydet (artık async - Redis kullanıyor)
+    // dateKey'i explicit olarak geçir - timezone dönüşüm sorununu önler
     await setImportData({
       orders: mergedOrders,
       drivers: mergedDrivers,
       date: orderDate.toISOString(),
       timestamp: new Date().toISOString()
-    })
+    }, dateKey)
 
     console.log(`[BASE44 IMPORT] Tamamlandi: ${mergeStats.added} yeni, ${mergeStats.updated} güncellendi, ${mergeStats.preserved} korundu (toplam: ${mergedOrders.length})`)
 

@@ -98,8 +98,10 @@ function isRedisConfigured(): boolean {
 const memoryStore: Map<string, ImportData> = new Map()
 
 // Belirli bir tarih için veri kaydet
-export async function setImportData(data: ImportData): Promise<void> {
-  const dateKey = formatDateKey(data.date)
+// explicitDateKey: Import route'tan YYYY-MM-DD formatında direkt geçilebilir (timezone sorununu önler)
+export async function setImportData(data: ImportData, explicitDateKey?: string): Promise<void> {
+  // Eğer explicit key verilmişse onu kullan, yoksa data.date'ten hesapla
+  const dateKey = explicitDateKey || formatDateKey(data.date)
   const dataWithKey = { ...data, dateKey }
   const storeKey = getStoreKey(dateKey)
 
