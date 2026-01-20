@@ -60,10 +60,10 @@ export async function POST(request: NextRequest) {
       order.status = 'ASSIGNED'
     })
 
-    // Tek seferde kaydet (race condition yok)
-    await setImportData(data)
+    // Tek seferde kaydet (race condition yok, explicit dateKey ile)
+    await setImportData(data, targetDate)
 
-    console.log(`[GROUP ASSIGN] Grup ${groupId}: ${groupOrders.length} sipariş ${driverName}'e atandı`)
+    console.log(`[GROUP ASSIGN] Grup ${groupId}: ${groupOrders.length} sipariş ${driverName}'e atandı (date: ${targetDate})`)
 
     return NextResponse.json({
       success: true,

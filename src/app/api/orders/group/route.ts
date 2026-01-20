@@ -117,9 +117,9 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Redis'e kaydet
-    await setImportData(data)
-    console.log(`[GROUP API] Değişiklikler Redis'e kaydedildi`)
+    // Redis'e kaydet (explicit dateKey ile - timezone sorununu önler)
+    await setImportData(data, targetDate)
+    console.log(`[GROUP API] Değişiklikler Redis'e kaydedildi (date: ${targetDate})`)
 
     return NextResponse.json({
       success: true,

@@ -60,9 +60,9 @@ export async function POST(
       console.log(`[UNGROUP] Sipariş ${id} gruptan çıkarıldı, grup ${oldGroupId} devam ediyor (${groupOrders.length - 1} sipariş kaldı)`)
     }
 
-    // Redis'e kaydet
-    await setImportData(data)
-    console.log(`[UNGROUP] Değişiklikler Redis'e kaydedildi`)
+    // Redis'e kaydet (explicit dateKey ile - timezone sorununu önler)
+    await setImportData(data, targetDate)
+    console.log(`[UNGROUP] Değişiklikler Redis'e kaydedildi (date: ${targetDate})`)
 
     return NextResponse.json({
       success: true,

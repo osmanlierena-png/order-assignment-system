@@ -128,8 +128,8 @@ export async function POST(request: NextRequest) {
         console.log(`[WEBHOOK] SMS_SENT - Order ${smsPayload.orderNumber}: updated`)
       }
 
-      // Redis'e kaydet
-      await setImportData(data)
+      // Redis'e kaydet (explicit dateKey ile - timezone sorununu önler)
+      await setImportData(data, smsPayload.date)
 
       return NextResponse.json({
         success: true,
@@ -208,8 +208,8 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      // Redis'e kaydet
-      await setImportData(data)
+      // Redis'e kaydet (explicit dateKey ile - timezone sorununu önler)
+      await setImportData(data, responsePayload.date)
 
       console.log(`[WEBHOOK] Order ${responsePayload.orderNumber} - ${canvasResponse} by ${responsePayload.driverName}`)
 
