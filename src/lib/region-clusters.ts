@@ -216,11 +216,37 @@ export function getRegionForZip(zip: string): 'VA' | 'MD' | 'DC' | null {
   return cluster?.region || null
 }
 
-// Adresten ZIP kodu çıkar
+// Adresten ZIP kodu çıkar (akıllı parse - sokak numarasını ZIP sanma bugı düzeltildi)
 export function extractZipFromAddress(address: string): string | null {
-  // "123 Main St, City, VA 22102" formatından ZIP çıkar
-  const match = address.match(/\b(\d{5})(?:-\d{4})?\b/)
-  return match ? match[1] : null
+  // Yöntem 1: Eyalet kısaltmasından sonra ZIP ara (en güvenilir)
+  // "Washington, DC 20008" veya "Alexandria, VA 22314"
+  const stateZipMatch = address.match(/\b(DC|VA|MD)\s*(\d{5})(?:-\d{4})?\b/i)
+  if (stateZipMatch) {
+    return stateZipMatch[2]
+  }
+
+  // Yöntem 2: Bilinen DC/MD/VA ZIP aralıklarını ara
+  // DC: 20001-20099, 20201-20599
+  // MD: 20601-21999
+  // VA: 22001-24699
+  const allZips = address.match(/\b(\d{5})(?:-\d{4})?\b/g)
+  if (allZips) {
+    for (const zip of allZips) {
+      const zipNum = parseInt(zip)
+      // DC/MD/VA bölgesi ZIP'leri
+      if (zipNum >= 20001 && zipNum <= 24699) {
+        return zip
+      }
+    }
+  }
+
+  // Yöntem 3: Son 5 haneli sayıyı al (fallback)
+  const matches = address.match(/\b(\d{5})(?:-\d{4})?\b/g)
+  if (matches && matches.length > 0) {
+    return matches[matches.length - 1].slice(0, 5)
+  }
+
+  return null
 }
 
 // Adres hub listesinde mi kontrol et

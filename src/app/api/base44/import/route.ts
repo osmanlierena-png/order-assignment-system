@@ -2,6 +2,54 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getTimeSlot, calculateLayeredMergeSuggestions, selectBestMerges, generateId } from '@/lib/utils'
 import { setImportData, getImportData, getAvailableDates, getLatestDate, ImportedOrder, ImportedDriver } from '@/lib/import-store'
 
+// ==========================================
+// MERGE MANTIĞI - Mevcut siparişleri koruyarak yenileri ekle
+// ==========================================
+function mergeOrders(existing: ImportedOrder[], incoming: ImportedOrder[]): {
+  merged: ImportedOrder[]
+  stats: { added: number; updated: number; preserved: number }
+} {
+  const result = [...existing]
+  let added = 0
+  let updated = 0
+
+  for (const newOrder of incoming) {
+    // orderNumber ile eşleştir (en güvenilir)
+    const existingIndex = result.findIndex(o => o.orderNumber === newOrder.orderNumber)
+
+    if (existingIndex >= 0) {
+      // GÜNCELLE: Mevcut siparişi güncelle ama Canvas'ta yapılan değişiklikleri koru
+      const existingOrder = result[existingIndex]
+      result[existingIndex] = {
+        ...newOrder,
+        // Canvas'ta yapılan değişiklikleri KORU:
+        groupId: existingOrder.groupId,           // Grup ataması
+        groupSource: existingOrder.groupSource,   // Grup kaynağı
+        price: existingOrder.price,               // Fiyat
+        groupPrice: existingOrder.groupPrice,     // Grup fiyatı
+        driverName: existingOrder.driverName || newOrder.driverName,  // Sürücü ataması
+        driverResponse: existingOrder.driverResponse,  // Sürücü yanıtı
+        driverResponseTime: existingOrder.driverResponseTime,
+        smsSent: existingOrder.smsSent,           // SMS durumu
+        smsSentTime: existingOrder.smsSentTime,
+        status: existingOrder.status || newOrder.status,  // Durum
+      }
+      updated++
+      console.log(`[MERGE] Güncellendi: ${newOrder.orderNumber}`)
+    } else {
+      // EKLE: Yeni sipariş
+      result.push(newOrder)
+      added++
+      console.log(`[MERGE] Yeni eklendi: ${newOrder.orderNumber}`)
+    }
+  }
+
+  const preserved = existing.length - updated
+  console.log(`[MERGE] Sonuç: ${added} yeni, ${updated} güncellendi, ${preserved} korundu (toplam: ${result.length})`)
+
+  return { merged: result, stats: { added, updated, preserved } }
+}
+
 // CORS headers - Base44'ten gelen isteklere izin ver
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -167,26 +215,52 @@ export async function POST(request: NextRequest) {
 
     console.log(`[BASE44 IMPORT] ${groupedOrderCount} sipariş ${selectedMerges.length} gruba atandı`)
 
+    // ==========================================
+    // MERGE: Mevcut siparişleri koru, yenileri ekle
+    // ==========================================
+    const dateKey = orderDate.toISOString().split('T')[0] // YYYY-MM-DD
+    const existingData = await getImportData(dateKey)
+    const existingOrders = existingData?.orders || []
+    const existingDrivers = existingData?.drivers || []
+
+    console.log(`[BASE44 IMPORT] Mevcut veri: ${existingOrders.length} sipariş, ${existingDrivers.length} sürücü`)
+
+    // Siparişleri birleştir
+    const { merged: mergedOrders, stats: mergeStats } = mergeOrders(existingOrders, processedOrders)
+
+    // Sürücüleri birleştir (varsa)
+    const driverNames = new Set(existingDrivers.map(d => d.name.toLowerCase()))
+    const newDrivers = processedDrivers.filter(d => !driverNames.has(d.name.toLowerCase()))
+    const mergedDrivers = [...existingDrivers, ...newDrivers]
+
     // Global store'a kaydet (artık async - Redis kullanıyor)
     await setImportData({
-      orders: processedOrders,
-      drivers: processedDrivers,
+      orders: mergedOrders,
+      drivers: mergedDrivers,
       date: orderDate.toISOString(),
       timestamp: new Date().toISOString()
     })
 
-    console.log(`[BASE44 IMPORT] Tamamlandi: ${orders.length} siparis islendi, ${selectedMerges.length} grup olusturuldu`)
+    console.log(`[BASE44 IMPORT] Tamamlandi: ${mergeStats.added} yeni, ${mergeStats.updated} güncellendi, ${mergeStats.preserved} korundu (toplam: ${mergedOrders.length})`)
 
     return NextResponse.json({
       success: true,
-      message: `Base44'ten import tamamlandi - ${selectedMerges.length} grup oluşturuldu`,
+      message: `Base44'ten import tamamlandi - ${mergeStats.added} yeni, ${mergeStats.updated} güncellendi, ${mergeStats.preserved} korundu`,
       statistics: {
         ordersReceived: orders.length,
         ordersProcessed: processedOrders.length,
         driversReceived: processedDrivers.length,
         groupsCreated: selectedMerges.length,
         groupedOrders: groupedOrderCount,
-        ungroupedOrders: processedOrders.length - groupedOrderCount
+        ungroupedOrders: processedOrders.length - groupedOrderCount,
+        // MERGE istatistikleri
+        merge: {
+          existingOrders: existingOrders.length,
+          newOrdersAdded: mergeStats.added,
+          ordersUpdated: mergeStats.updated,
+          ordersPreserved: mergeStats.preserved,
+          totalOrders: mergedOrders.length
+        }
       },
       groupingSummary: {
         tightSuggestions: suggestions.tight.length,

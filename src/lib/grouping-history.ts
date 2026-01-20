@@ -128,7 +128,7 @@ export const SCORING = {
 }
 
 export const THRESHOLDS = {
-  MIN_SCORE_TO_SUGGEST: 50,
+  MIN_SCORE_TO_SUGGEST: 40,  // 50'den 40'a düşürüldü - daha fazla gruplama önerisi için
   HIGH_CONFIDENCE: 80,
   AUTO_GROUP: 100,
   MAX_GROUP_SIZE_SAFE: 5,

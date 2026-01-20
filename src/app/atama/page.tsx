@@ -432,6 +432,76 @@ export default function AtamaPage() {
       return
     }
 
+    // GRUPLU SİPARİŞ: Aynı sürücüye atanmış başka gruplar varsa birleştir
+    if (currentOrder?.groupId) {
+      // Aynı sürücüye atanmış BAŞKA grupları bul
+      const otherGroupsWithSameDriver = orders.filter(o =>
+        o.id !== orderId &&           // Kendisi değil
+        o.driver === driverName &&    // Aynı sürücü
+        o.groupId &&                  // Grupta
+        o.groupId !== currentOrder.groupId  // Farklı grup
+      )
+
+      // Benzersiz grup ID'lerini al
+      const uniqueGroupIds = [...new Set(otherGroupsWithSameDriver.map(o => o.groupId).filter((id): id is string => id !== null))]
+
+      if (uniqueGroupIds.length > 0) {
+        console.log(`[AUTO-GROUP-MERGE] ${driverName} için grup birleştirme: ${currentOrder.groupId} + ${uniqueGroupIds.join(', ')}`)
+
+        // Önce mevcut siparişi ata
+        setOrders(prev =>
+          prev.map(o => (o.id === orderId ? { ...o, driver: driverName, status: 'ASSIGNED' } : o))
+        )
+
+        try {
+          // Sipariş atamasını yap
+          await fetch(`/api/orders/${orderId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              driver: driverName,
+              status: 'ASSIGNED',
+              date: selectedDate
+            }),
+          })
+
+          // Diğer grupları bu gruba birleştir
+          let mergedOrderCount = 0
+          for (const otherGroupId of uniqueGroupIds) {
+            const groupOrders = orders.filter(o => o.groupId === otherGroupId)
+            for (const order of groupOrders) {
+              await fetch('/api/orders/group', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  sourceOrderId: order.id,
+                  targetOrderId: null,
+                  targetGroupId: currentOrder.groupId,
+                  date: selectedDate
+                }),
+              })
+              mergedOrderCount++
+            }
+          }
+
+          // Verileri yeniden yükle
+          await fetchData(selectedDate || undefined)
+
+          setMessage({
+            type: 'success',
+            text: `${driverName} için ${uniqueGroupIds.length} grup birleştirildi (${mergedOrderCount} sipariş eklendi)`
+          })
+          setTimeout(() => setMessage(null), 5000)
+
+        } catch (error) {
+          console.error('Grup birleştirme hatası:', error)
+          setMessage({ type: 'error', text: 'Grup birleştirme başarısız oldu' })
+        }
+
+        return
+      }
+    }
+
     // Normal atama (otomatik gruplama yok)
     setOrders(prev =>
       prev.map(o => (o.id === orderId ? { ...o, driver: driverName, status: 'ASSIGNED' } : o))

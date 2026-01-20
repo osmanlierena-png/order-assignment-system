@@ -17,6 +17,7 @@ import 'reactflow/dist/style.css'
 
 import OrderNode from './OrderNode'
 import GroupNode from './GroupNode'
+import { extractZipFromAddress, getClusterForZip, REGION_CLUSTERS } from '@/lib/region-clusters'
 
 const nodeTypes = {
   order: OrderNode,
@@ -101,6 +102,7 @@ function AssignmentCanvasInner({
   const [groupFilter, setGroupFilter] = useState<string>('ALL') // ALL, GROUPED, UNGROUPED, MIXED
   const [responseFilter, setResponseFilter] = useState<string>('ALL') // ALL, PENDING_RESPONSE, ACCEPTED, REJECTED
   const [assignmentFilter, setAssignmentFilter] = useState<string>('UNASSIGNED') // UNASSIGNED (varsayılan), ASSIGNED, ALL
+  const [regionFilter, setRegionFilter] = useState<string>('ALL') // Teslim bölgesi filtresi
 
   // Arama
   const [searchQuery, setSearchQuery] = useState<string>('')
@@ -157,6 +159,7 @@ function AssignmentCanvasInner({
     setGroupFilter('ALL')
     setResponseFilter('ALL')
     setAssignmentFilter('ALL')
+    setRegionFilter('ALL')
 
     // Kısa bir gecikme ile node'a odaklan (filtrelerin uygulanması için)
     setTimeout(() => {
@@ -404,9 +407,25 @@ function AssignmentCanvasInner({
         if (assignmentFilter === 'UNASSIGNED' && assigned) return false
         if (assignmentFilter === 'ASSIGNED' && !assigned) return false
       }
+      // Bölge filtresi (dropoff adresine göre)
+      if (regionFilter !== 'ALL') {
+        const dropoffZip = extractZipFromAddress(order.dropoffAddress)
+        if (!dropoffZip) return false
+
+        if (regionFilter === 'UZAK') {
+          // Uzak bölgeler: Fredericksburg, Frederick, Gainesville, Woodbridge
+          const uzakClusterIds = ['va-fredericksburg', 'md-frederick', 'va-gainesville', 'va-woodbridge']
+          const cluster = getClusterForZip(dropoffZip)
+          if (!cluster || !uzakClusterIds.includes(cluster.id)) return false
+        } else {
+          // Belirli bir cluster seçilmiş
+          const cluster = getClusterForZip(dropoffZip)
+          if (!cluster || cluster.id !== regionFilter) return false
+        }
+      }
       return true
     })
-  }, [orders, dateFilter, timeSlotFilter, statusFilter, groupFilter, mixedGroupIds, responseFilter, assignmentFilter, isOrderAssigned])
+  }, [orders, dateFilter, timeSlotFilter, statusFilter, groupFilter, mixedGroupIds, responseFilter, assignmentFilter, regionFilter, isOrderAssigned])
 
   // Node'ları oluştur
   useEffect(() => {
@@ -913,7 +932,7 @@ function AssignmentCanvasInner({
 
           <span className="text-gray-300">|</span>
 
-          {/* Atama Durumu Filtresi - YENİ */}
+          {/* Atama Durumu Filtresi */}
           <select
             value={assignmentFilter}
             onChange={(e) => setAssignmentFilter(e.target.value)}
@@ -930,8 +949,51 @@ function AssignmentCanvasInner({
             <option value="ALL">🔄 Tümü</option>
           </select>
 
+          {/* Bölge Filtresi (Teslim Adresi) */}
+          <select
+            value={regionFilter}
+            onChange={(e) => setRegionFilter(e.target.value)}
+            className={`border-2 rounded-lg px-3 py-1.5 text-xs shadow-sm focus:outline-none focus:ring-2 font-semibold ${
+              regionFilter !== 'ALL'
+                ? 'bg-cyan-50 border-cyan-400 text-cyan-800 focus:ring-cyan-500'
+                : 'bg-gray-50 border-gray-300 text-gray-800 focus:ring-gray-500'
+            }`}
+          >
+            <option value="ALL">📍 Tüm Bölgeler</option>
+            <optgroup label="🏛️ DC">
+              <option value="dc-downtown">DC Downtown-K Street</option>
+              <option value="dc-capitol">Capitol Hill</option>
+              <option value="dc-nw-residential">NW Residential</option>
+              <option value="dc-ne-se">NE-SE DC</option>
+            </optgroup>
+            <optgroup label="🌳 Virginia">
+              <option value="va-mclean-tysons">McLean-Tysons-Vienna</option>
+              <option value="va-arlington">Arlington</option>
+              <option value="va-reston-herndon">Reston-Herndon</option>
+              <option value="va-falls-church-fairfax">Falls Church-Fairfax</option>
+              <option value="va-alexandria">Alexandria</option>
+              <option value="va-springfield-annandale">Springfield-Annandale</option>
+              <option value="va-loudoun">Loudoun County</option>
+            </optgroup>
+            <optgroup label="🦀 Maryland">
+              <option value="md-bethesda">Bethesda-Chevy Chase</option>
+              <option value="md-rockville">Rockville</option>
+              <option value="md-gaithersburg">Gaithersburg-Germantown</option>
+              <option value="md-silver-spring">Silver Spring</option>
+              <option value="md-college-park">College Park-Greenbelt</option>
+              <option value="md-laurel-columbia">Laurel-Columbia</option>
+            </optgroup>
+            <optgroup label="🚗 Uzak Bölgeler">
+              <option value="UZAK">🚗 Tüm Uzak Bölgeler</option>
+              <option value="va-fredericksburg">Fredericksburg</option>
+              <option value="va-woodbridge">Woodbridge-Dale City</option>
+              <option value="va-gainesville">Gainesville-Manassas</option>
+              <option value="md-frederick">Frederick</option>
+            </optgroup>
+          </select>
+
           {/* Filtre aktif göstergesi */}
-          {(dateFilter !== 'ALL' || timeSlotFilter !== 'ALL' || statusFilter !== 'ALL' || groupFilter !== 'ALL' || responseFilter !== 'ALL' || assignmentFilter !== 'UNASSIGNED') && (
+          {(dateFilter !== 'ALL' || timeSlotFilter !== 'ALL' || statusFilter !== 'ALL' || groupFilter !== 'ALL' || responseFilter !== 'ALL' || assignmentFilter !== 'UNASSIGNED' || regionFilter !== 'ALL') && (
             <button
               onClick={() => {
                 setDateFilter('ALL')
@@ -940,6 +1002,7 @@ function AssignmentCanvasInner({
                 setGroupFilter('ALL')
                 setResponseFilter('ALL')
                 setAssignmentFilter('UNASSIGNED')
+                setRegionFilter('ALL')
               }}
               className="bg-red-100 text-red-600 px-2 py-1 rounded text-xs hover:bg-red-200"
             >

@@ -15,10 +15,25 @@ const redis = new Redis({
 const STORE_PREFIX = 'canvas:import'
 const TTL = 60 * 60 * 24 * 30 // 30 gün (geçmiş verilere erişim için)
 
-// Tarih formatı: YYYY-MM-DD
+// Tarih formatı: YYYY-MM-DD (America/New_York timezone - Washington DC)
 function formatDateKey(date: string | Date): string {
   const d = typeof date === 'string' ? new Date(date) : date
-  return d.toISOString().split('T')[0] // "2025-01-06"
+
+  // UTC yerine Eastern Time (Washington DC) kullan
+  // Bu sayede gece yarısı geçişlerinde tarih karışıklığı olmaz
+  const options: Intl.DateTimeFormatOptions = {
+    timeZone: 'America/New_York',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }
+
+  const parts = new Intl.DateTimeFormat('en-CA', options).formatToParts(d)
+  const year = parts.find(p => p.type === 'year')?.value
+  const month = parts.find(p => p.type === 'month')?.value
+  const day = parts.find(p => p.type === 'day')?.value
+
+  return `${year}-${month}-${day}` // "2025-01-20"
 }
 
 function getStoreKey(date: string): string {
