@@ -442,6 +442,9 @@ export default function AtamaPage() {
         o.groupId !== currentOrder.groupId  // Farklı grup
       )
 
+      console.log(`[AUTO-GROUP-MERGE] Check: currentOrder.groupId=${currentOrder.groupId}, driverName=${driverName}`)
+      console.log(`[AUTO-GROUP-MERGE] Other orders with same driver:`, otherGroupsWithSameDriver.map(o => ({ id: o.id, driver: o.driver, groupId: o.groupId })))
+
       // Benzersiz grup ID'lerini al
       const uniqueGroupIds = [...new Set(otherGroupsWithSameDriver.map(o => o.groupId).filter((id): id is string => id !== null))]
 
