@@ -8,29 +8,49 @@ interface Driver {
   phone: string | null
 }
 
+interface DriverRecommendation {
+  driverName: string
+  score: number
+  regionExperience: number
+  acceptRate: number
+  reasons: string[]
+}
+
 interface Props {
   drivers: Driver[]
   selectedDriver: string | null
   onSelect: (driverName: string) => void
   placeholder?: string
+  recommendations?: DriverRecommendation[]
 }
 
 export default function SearchableDriverSelect({
   drivers,
   selectedDriver,
   onSelect,
-  placeholder = 'Sürücü Ara...'
+  placeholder = 'Sürücü Ara...',
+  recommendations = []
 }: Props) {
   const [isOpen, setIsOpen] = useState(false)
   const [search, setSearch] = useState('')
   const containerRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
+  // Önerilen sürücü isimleri seti
+  const recommendedNames = useMemo(() => {
+    return new Set(recommendations.map(r => r.driverName))
+  }, [recommendations])
+
+  // Öneri bilgisi map'i
+  const recommendationMap = useMemo(() => {
+    const map = new Map<string, DriverRecommendation>()
+    recommendations.forEach(r => map.set(r.driverName, r))
+    return map
+  }, [recommendations])
+
   // Filtrelenmiş sürücüler
   const filteredDrivers = useMemo(() => {
-    console.log('[DRIVER-SELECT] drivers prop:', drivers?.length || 0, 'search:', search)
     if (!drivers || drivers.length === 0) {
-      console.warn('[DRIVER-SELECT] Drivers array boş!')
       return []
     }
     if (!search.trim()) return drivers
@@ -39,7 +59,7 @@ export default function SearchableDriverSelect({
       d.name.toLowerCase().includes(searchLower) ||
       (d.phone && d.phone.includes(search))
     )
-  }, [drivers, search])
+  }, [drivers, search, recommendations])
 
   // Dışarı tıklama
   useEffect(() => {
@@ -146,28 +166,98 @@ export default function SearchableDriverSelect({
           </div>
 
           {/* Sürücü Listesi */}
-          <div className="max-h-48 overflow-y-auto overscroll-contain">
+          <div className="max-h-60 overflow-y-auto overscroll-contain">
             {filteredDrivers.length === 0 ? (
               <div className="px-3 py-2 text-xs text-gray-500 text-center">
                 Sürücü bulunamadı
               </div>
             ) : (
-              filteredDrivers.map((driver) => (
-                <button
-                  key={driver.id}
-                  type="button"
-                  onClick={() => handleSelect(driver)}
-                  className={`
-                    w-full px-3 py-2 text-left text-xs hover:bg-purple-50 flex items-center justify-between
-                    ${selectedDriver === driver.name ? 'bg-green-50 text-black' : 'text-black'}
-                  `}
-                >
-                  <span className="font-medium">{driver.name}</span>
-                  {driver.phone && (
-                    <span className="text-gray-400 text-[10px]">{driver.phone}</span>
-                  )}
-                </button>
-              ))
+              <>
+                {/* Önerilen Sürücüler */}
+                {recommendations.length > 0 && !search && (
+                  <>
+                    <div className="px-3 py-1.5 bg-red-50 border-b border-red-200 text-[10px] font-bold text-red-700 uppercase">
+                      🎯 Önerilen Sürücüler
+                    </div>
+                    {recommendations.map((rec) => {
+                      const driver = drivers.find(d => d.name === rec.driverName)
+                      if (!driver) return null
+                      return (
+                        <button
+                          key={`rec-${driver.id}`}
+                          type="button"
+                          onClick={() => handleSelect(driver)}
+                          className={`
+                            w-full px-3 py-2 text-left text-xs border-l-4 border-red-500
+                            ${selectedDriver === driver.name ? 'bg-red-200' : 'bg-red-50 hover:bg-red-100'}
+                          `}
+                        >
+                          <div className="flex items-center justify-between">
+                            <span className="font-bold text-black">{driver.name}</span>
+                            <span className="text-[10px] bg-red-500 text-white px-2 py-0.5 rounded-full font-bold">
+                              {rec.score}p
+                            </span>
+                          </div>
+                          {rec.reasons.length > 0 && (
+                            <div className="text-[10px] text-red-700 mt-0.5">
+                              {rec.reasons[0]}
+                            </div>
+                          )}
+                        </button>
+                      )
+                    })}
+                    <div className="border-b-2 border-gray-200 my-1" />
+                  </>
+                )}
+
+                {/* Diğer Sürücüler */}
+                {!search && recommendations.length > 0 && (
+                  <div className="px-3 py-1 bg-gray-50 text-[10px] text-gray-500">
+                    Diğer sürücüler
+                  </div>
+                )}
+                {filteredDrivers
+                  .filter(d => search || !recommendedNames.has(d.name))
+                  .map((driver) => {
+                    const isRecommended = recommendedNames.has(driver.name)
+                    const rec = recommendationMap.get(driver.name)
+                    return (
+                      <button
+                        key={driver.id}
+                        type="button"
+                        onClick={() => handleSelect(driver)}
+                        className={`
+                          w-full px-3 py-2 text-left text-xs flex items-center justify-between
+                          ${isRecommended && search
+                            ? 'bg-red-50 border-l-4 border-red-500 hover:bg-red-100'
+                            : selectedDriver === driver.name
+                            ? 'bg-green-50 text-black'
+                            : 'hover:bg-purple-50 text-black'
+                          }
+                        `}
+                      >
+                        <div>
+                          <span className="font-medium">{driver.name}</span>
+                          {isRecommended && search && rec && (
+                            <span className="ml-2 text-[10px] text-red-600">
+                              ({rec.reasons[0]})
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {isRecommended && search && rec && (
+                            <span className="text-[10px] bg-red-500 text-white px-1.5 py-0.5 rounded">
+                              {rec.score}p
+                            </span>
+                          )}
+                          {driver.phone && (
+                            <span className="text-gray-400 text-[10px]">{driver.phone}</span>
+                          )}
+                        </div>
+                      </button>
+                    )
+                  })}
+              </>
             )}
           </div>
 

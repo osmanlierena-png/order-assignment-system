@@ -13,6 +13,14 @@ interface Driver {
   phone: string | null
 }
 
+interface DriverRecommendation {
+  driverName: string
+  score: number
+  regionExperience: number
+  acceptRate: number
+  reasons: string[]
+}
+
 interface OrderInGroup {
   id: string
   orderNumber: string
@@ -43,6 +51,7 @@ interface GroupNodeData {
   groupPrice?: number // Grup toplam fiyatı
   groupSource?: GroupSource // Grup kaynağı: sistem mi manuel mi
   drivers?: Driver[]
+  driverRecommendations?: DriverRecommendation[] // Sürücü önerileri
   onDriverSelect?: (orderId: string, driverName: string) => void
   onRemoveFromGroup?: (orderId: string) => void
   onPriceChange?: (orderId: string, price: number) => void
@@ -148,6 +157,11 @@ function GroupNode({ data }: NodeProps<GroupNodeData>) {
   }, [data.orders])
 
   const hasGroupPriceDetails = groupTotals.totalTip > 0 || groupTotals.totalPriceAmount > 0
+
+  // Tekli fiyatların otomatik toplamı
+  const calculatedGroupPrice = useMemo(() => {
+    return data.orders.reduce((sum, order) => sum + (order.price || 0), 0)
+  }, [data.orders])
 
   // Gruptaki benzersiz zaman dilimlerini tespit et
   const uniqueTimeSlots = useMemo(() => {
@@ -358,6 +372,15 @@ function GroupNode({ data }: NodeProps<GroupNodeData>) {
               step="0.01"
               min="0"
             />
+            {/* Otomatik Toplam Göstergesi */}
+            {calculatedGroupPrice > 0 && (
+              <span
+                className="text-[10px] px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded"
+                title="Tekli fiyatların toplamı"
+              >
+                Σ ${calculatedGroupPrice.toFixed(2)}
+              </span>
+            )}
             {/* Açılır panel butonu */}
             {hasGroupPriceDetails && (
               <button
@@ -539,6 +562,25 @@ function GroupNode({ data }: NodeProps<GroupNodeData>) {
                       {shortenAddress(order.dropoffAddress)}
                     </span>
                   </div>
+
+                  {/* Tekli Fiyat */}
+                  <div className="flex items-center gap-1 mt-1 pt-1 border-t border-gray-200/50">
+                    <span className="text-green-600 text-[10px]">💰</span>
+                    <span className="text-[9px] text-gray-600">$</span>
+                    <input
+                      type="number"
+                      value={order.price || ''}
+                      onChange={(e) => {
+                        const value = parseFloat(e.target.value) || 0
+                        data.onPriceChange?.(order.id, value)
+                      }}
+                      placeholder="0"
+                      className="w-14 text-[10px] px-1 py-0.5 border border-gray-300 rounded bg-white text-black focus:outline-none focus:ring-1 focus:ring-green-500"
+                      step="0.01"
+                      min="0"
+                      onClick={(e) => e.stopPropagation()}
+                    />
+                  </div>
                 </div>
               </div>
             </div>
@@ -558,6 +600,7 @@ function GroupNode({ data }: NodeProps<GroupNodeData>) {
             })
           }}
           placeholder={groupResponseStatus === 'REJECTED' ? "Yeni Sürücü Seç" : "Sürücü Seç (Tüm Grup)"}
+          recommendations={data.driverRecommendations}
         />
 
         {/* Grup Reddedilmişse Uyarı */}

@@ -733,6 +733,9 @@ export default function AtamaPage() {
 
   // Sipariş fiyatını güncelle
   const handlePriceChange = async (orderId: string, price: number) => {
+    // Siparişi bul
+    const order = orders.find(o => o.id === orderId)
+
     // Optimistik güncelleme
     setOrders(prev =>
       prev.map(o => (o.id === orderId ? { ...o, price } : o))
@@ -753,6 +756,30 @@ export default function AtamaPage() {
         // Hata olursa geri al
         await fetchData()
         setMessage({ type: 'error', text: 'Fiyat güncellenemedi' })
+        return
+      }
+
+      // Sipariş gruptaysa, grup fiyatını otomatik güncelle
+      if (order?.groupId) {
+        const groupOrders = orders.filter(o => o.groupId === order.groupId)
+        const newGroupPrice = groupOrders.reduce((sum, o) =>
+          sum + (o.id === orderId ? price : (o.price || 0)), 0)
+
+        // State güncelle
+        setOrders(prev =>
+          prev.map(o => (o.groupId === order.groupId ? { ...o, groupPrice: newGroupPrice } : o))
+        )
+
+        // API'ye kaydet
+        await fetch('/api/orders/group-price', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            groupId: order.groupId,
+            groupPrice: newGroupPrice,
+            date: selectedDate
+          }),
+        })
       }
     } catch (error) {
       console.error('Price update error:', error)

@@ -60,6 +60,14 @@ interface Driver {
   phone: string | null
 }
 
+interface DriverRecommendation {
+  driverName: string
+  score: number
+  regionExperience: number
+  acceptRate: number
+  reasons: string[]
+}
+
 interface AssignmentCanvasProps {
   orders: Order[]
   groups: OrderGroup[]
@@ -90,6 +98,12 @@ function AssignmentCanvasInner({
   const [nodes, setNodes, onNodesChange] = useNodesState([])
   const [edges, setEdges, onEdgesChange] = useEdgesState([])
 
+  // Sürücü önerileri cache'i (ZIP bazlı)
+  const [recommendationsCache, setRecommendationsCache] = useState<Record<string, DriverRecommendation[]>>({})
+  const recommendationsCacheRef = useRef<Record<string, DriverRecommendation[]>>({})
+  const pendingRequestsRef = useRef<Set<string>>(new Set()) // Bekleyen istekler
+  const loadedOrdersHashRef = useRef<string>('') // Yüklenen siparişlerin hash'i
+
   // Node pozisyonlarını kaydet (birleştirme sonrası korunsun)
   const [savedPositions, setSavedPositions] = useState<Record<string, { x: number; y: number }>>({})
   const [positionsLoaded, setPositionsLoaded] = useState(false)
@@ -119,6 +133,82 @@ function AssignmentCanvasInner({
   const [newDriverPhone, setNewDriverPhone] = useState<string>('')
   const [addDriverLoading, setAddDriverLoading] = useState<boolean>(false)
   const [addDriverError, setAddDriverError] = useState<string | null>(null)
+
+  // Sürücü önerilerini fetch et (ref kullanarak sonsuz döngüyü önle)
+  const fetchRecommendations = useCallback(async (pickupZip: string, timeSlot?: string): Promise<DriverRecommendation[]> => {
+    const cacheKey = `${pickupZip}-${timeSlot || 'all'}`
+
+    // Cache'te varsa hemen döndür
+    if (recommendationsCacheRef.current[cacheKey]) {
+      return recommendationsCacheRef.current[cacheKey]
+    }
+
+    // Zaten bekleyen istek varsa atla
+    if (pendingRequestsRef.current.has(cacheKey)) {
+      return []
+    }
+
+    // İsteği bekleyenlere ekle
+    pendingRequestsRef.current.add(cacheKey)
+
+    try {
+      const params = new URLSearchParams({ pickupZip })
+      if (timeSlot) params.append('timeSlot', timeSlot)
+
+      const response = await fetch(`/api/drivers/recommendations?${params}`)
+      if (!response.ok) {
+        pendingRequestsRef.current.delete(cacheKey)
+        return []
+      }
+
+      const data = await response.json()
+      const recommendations = data.recommendations || []
+
+      // Hem ref'e hem state'e kaydet
+      recommendationsCacheRef.current[cacheKey] = recommendations
+      setRecommendationsCache(prev => ({
+        ...prev,
+        [cacheKey]: recommendations
+      }))
+
+      pendingRequestsRef.current.delete(cacheKey)
+      return recommendations
+    } catch (error) {
+      console.error('Error fetching recommendations:', error)
+      pendingRequestsRef.current.delete(cacheKey)
+      return []
+    }
+  }, []) // Boş dependency - sonsuz döngü yok
+
+  // Siparişler için önerileri yükle (hem tekil hem gruplu siparişler)
+  useEffect(() => {
+    const loadRecommendations = async () => {
+      const uniqueZips = new Set<string>()
+
+      // TÜM siparişlerden ZIP'leri topla (gruplu + grupsuz)
+      orders.forEach(order => {
+        const zip = extractZipFromAddress(order.pickupAddress)
+        if (zip) uniqueZips.add(zip)
+      })
+
+      // Hash oluştur - siparişler değişmediyse tekrar yükleme
+      const ordersHash = orders.map(o => o.id).sort().join(',')
+      if (loadedOrdersHashRef.current === ordersHash) {
+        return // Aynı siparişler, tekrar yükleme
+      }
+      loadedOrdersHashRef.current = ordersHash
+
+      // Her benzersiz ZIP için önerileri yükle
+      for (const zip of uniqueZips) {
+        await fetchRecommendations(zip)
+      }
+    }
+
+    if (orders.length > 0) {
+      loadRecommendations()
+    }
+  }, [orders, fetchRecommendations])
+
 
   // useReactFlow hook - güncel node'ları almak için
   const { getNodes, fitView, setCenter } = useReactFlow()
@@ -539,6 +629,11 @@ function AssignmentCanvasInner({
       // Grup yüksekliğini hesapla
       const groupHeight = GROUP_BASE_HEIGHT + (groupOrdersList.length * GROUP_ORDER_HEIGHT)
 
+      // Grup için önerileri al (ilk siparişin ZIP'ini kullan)
+      const groupZip = extractZipFromAddress(groupOrdersList[0].pickupAddress)
+      const groupCacheKey = `${groupZip}-all`
+      const groupRecommendations = recommendationsCache[groupCacheKey] || []
+
       newNodes.push({
         id: nodeId,
         type: 'group',
@@ -566,6 +661,7 @@ function AssignmentCanvasInner({
           })),
           groupPrice: groupOrdersList[0]?.groupPrice,
           drivers: drivers,
+          driverRecommendations: groupRecommendations,  // Sürücü önerileri
           onDriverSelect: onAssign,
           onRemoveFromGroup: onRemoveFromGroup,
           onPriceChange: onPriceChange,
@@ -587,6 +683,11 @@ function AssignmentCanvasInner({
       const savedPos = savedPositions[nodeId]
       const x = savedPos?.x ?? getOrderX(order.timeSlot)
       const y = savedPos?.y ?? yTracker[order.timeSlot]
+
+      // Bu sipariş için önerileri al (cache key sadece ZIP bazlı)
+      const orderZip = extractZipFromAddress(order.pickupAddress)
+      const cacheKey = `${orderZip}-all`
+      const orderRecommendations = recommendationsCache[cacheKey] || []
 
       newNodes.push({
         id: nodeId,
@@ -611,6 +712,7 @@ function AssignmentCanvasInner({
           driverResponseTime: order.driverResponseTime,
           smsSent: order.smsSent,                    // SMS gönderildi mi?
           drivers: drivers,
+          driverRecommendations: orderRecommendations,  // Sürücü önerileri
           onDriverSelect: onAssign,
           onPriceChange: onPriceChange,
         },
@@ -624,7 +726,7 @@ function AssignmentCanvasInner({
 
     setNodes(newNodes)
     setEdges([])
-  }, [filteredOrders, drivers, setNodes, setEdges, onAssign, onRemoveFromGroup, onPriceChange, onGroupPriceChange, savedPositions])
+  }, [filteredOrders, drivers, setNodes, setEdges, onAssign, onRemoveFromGroup, onPriceChange, onGroupPriceChange, savedPositions, recommendationsCache])
 
   // Node değişikliklerini takip et ve pozisyonları kaydet
   const handleNodesChange = useCallback((changes: Parameters<typeof onNodesChange>[0]) => {

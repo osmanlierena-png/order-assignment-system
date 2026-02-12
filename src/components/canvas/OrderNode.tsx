@@ -11,6 +11,14 @@ interface Driver {
   phone: string | null
 }
 
+interface DriverRecommendation {
+  driverName: string
+  score: number
+  regionExperience: number
+  acceptRate: number
+  reasons: string[]
+}
+
 interface OrderNodeData {
   id: string
   orderNumber: string
@@ -32,6 +40,7 @@ interface OrderNodeData {
   driverResponseTime?: string                       // Yanıt zamanı
   smsSent?: boolean                                  // SMS gönderildi mi?
   drivers?: Driver[]
+  driverRecommendations?: DriverRecommendation[] // Sürücü önerileri
   onDriverSelect?: (orderId: string, driverName: string) => void
   onPriceChange?: (orderId: string, price: number) => void
 }
@@ -280,6 +289,7 @@ function OrderNode({ data, selected }: NodeProps<OrderNodeData>) {
                 }
               }}
               placeholder="Sürücü Seç..."
+              recommendations={data.driverRecommendations}
             />
           </div>
         </div>
