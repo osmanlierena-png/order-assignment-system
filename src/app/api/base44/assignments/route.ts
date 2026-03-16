@@ -103,9 +103,6 @@ export async function GET(request: NextRequest) {
       }
     })
 
-    // Grup fiyat takibi - her grup için sadece BİR KEZ fiyat gönder
-    const groupPriceUsed: Record<string, boolean> = {}
-
     // Atamaları hazırla - grup içindeki eksik sürücüleri tamamla
     let assignments = importData.orders.map(order => {
       // Eğer sipariş gruplu ve sürücüsü yoksa, gruptaki diğer siparişin sürücüsünü al
@@ -115,29 +112,16 @@ export async function GET(request: NextRequest) {
         console.log(`[ASSIGNMENTS] Grup ${order.groupId} için eksik sürücü tamamlandı: ${driverName}`)
       }
 
-      // Fiyat Mantığı:
-      // - Tekil sipariş → order.price kullan
-      // - Gruplu sipariş → SADECE İLK SİPARİŞTE groupPrice, diğerleri 0
-      let effectivePrice = 0
-      let isGroupPrimary = false  // Bu sipariş grup fiyatını taşıyor mu?
+      // Fiyat Mantığı: Her sipariş kendi bireysel fiyatıyla gider
+      // Grup fiyatı = bireysel fiyatların toplamı (bilgi amaçlı)
+      const effectivePrice = order.price || 0
 
+      // Grup toplam fiyatını hesapla (bilgi amaçlı)
+      let calculatedGroupPrice = 0
       if (order.groupId) {
-        // Gruplu sipariş
-        if (!groupPriceUsed[order.groupId]) {
-          // Bu grup için henüz fiyat gönderilmedi - bu ilk sipariş
-          effectivePrice = order.groupPrice || 0
-          isGroupPrimary = true
-          groupPriceUsed[order.groupId] = true
-          console.log(`[PRICE] Grup ${order.groupId} fiyatı: $${effectivePrice} (ilk sipariş: ${order.orderNumber})`)
-        } else {
-          // Bu grup için zaten fiyat gönderildi - 0 gönder
-          effectivePrice = 0
-          isGroupPrimary = false
-        }
-      } else {
-        // Tekil sipariş
-        effectivePrice = order.price || 0
-        isGroupPrimary = false  // Tekil siparişler için anlamsız
+        calculatedGroupPrice = importData.orders
+          .filter(o => o.groupId === order.groupId)
+          .reduce((sum, o) => sum + (o.price || 0), 0)
       }
 
       return {
@@ -146,11 +130,11 @@ export async function GET(request: NextRequest) {
         driverName,
         driverId: order.driverId || null,
         groupId: order.groupId || null,
-        price: effectivePrice,  // Base44 için: TOPLAMA UYGUN fiyat (gruplu ise sadece ilk sipariş)
-        groupPrice: order.groupPrice || 0,  // Bilgi amaçlı: grubun toplam fiyatı
-        isGroupPrimary,  // true = bu sipariş grup fiyatını taşıyor (SMS'te kullan)
-        offer: effectivePrice,  // Alternatif alan adı
-        driverPayment: effectivePrice,  // Başka alternatif
+        price: effectivePrice,  // Her sipariş kendi bireysel fiyatıyla
+        groupPrice: calculatedGroupPrice,  // Bilgi amaçlı: bireysel fiyatların toplamı
+        isGroupPrimary: false,  // Artık kullanılmıyor
+        offer: effectivePrice,
+        driverPayment: effectivePrice,
         status: order.driverResponse === 'ACCEPTED' ? 'CONFIRMED'
               : driverName ? 'ASSIGNED'
               : (order.status || 'PENDING'),

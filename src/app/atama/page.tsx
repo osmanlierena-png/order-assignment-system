@@ -857,6 +857,45 @@ export default function AtamaPage() {
     }
   }
 
+  // Otomatik fiyatlama
+  const [autoPricing, setAutoPricing] = useState(false)
+  const [pricingStats, setPricingStats] = useState<{ averagePrice: number; pricedOrders: number; totalOrders: number; averageWarning: boolean } | null>(null)
+
+  const handleAutoPrice = async () => {
+    if (!selectedDate) {
+      setMessage({ type: 'error', text: 'Tarih seçilmedi' })
+      return
+    }
+
+    setAutoPricing(true)
+    try {
+      const response = await fetch('/api/orders/auto-price', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ date: selectedDate }),
+      })
+
+      const result = await response.json()
+
+      if (response.ok && result.success) {
+        setPricingStats(result.stats)
+        setMessage({
+          type: 'success',
+          text: `${result.stats.pricedOrders} sipariş fiyatlandı, ort: $${result.stats.averagePrice.toFixed(2)}${result.stats.averageWarning ? ' ⚠️ Ortalama $32.50 üstünde' : ''}`
+        })
+        // Siparişleri yeniden yükle
+        await fetchData(selectedDate)
+      } else {
+        setMessage({ type: 'error', text: result.error || 'Fiyatlama başarısız' })
+      }
+    } catch (error) {
+      console.error('Auto pricing error:', error)
+      setMessage({ type: 'error', text: 'Fiyatlama sırasında hata oluştu' })
+    } finally {
+      setAutoPricing(false)
+    }
+  }
+
   // Base44'e atamaları gönder
   const [exporting, setExporting] = useState(false)
 
@@ -868,6 +907,15 @@ export default function AtamaPage() {
       setMessage({ type: 'error', text: 'Atanmış sipariş bulunamadı' })
       setTimeout(() => setMessage(null), 3000)
       return
+    }
+
+    // Fiyatı olmayan siparişleri kontrol et
+    const unpricedOrders = assignedOrders.filter(o => !o.price || o.price <= 0)
+    if (unpricedOrders.length > 0) {
+      const proceed = window.confirm(
+        `⚠️ ${unpricedOrders.length} siparişin fiyatı boş (canvas_price = $0).\n\nSiparişler: ${unpricedOrders.map(o => o.orderNumber).join(', ')}\n\nYine de göndermek istiyor musunuz?`
+      )
+      if (!proceed) return
     }
 
     setExporting(true)
@@ -986,6 +1034,35 @@ export default function AtamaPage() {
 
           </div>
           <div className="flex items-center gap-2">
+            <Button
+              onClick={handleAutoPrice}
+              disabled={autoPricing || orders.length === 0}
+              variant="outline"
+              className="text-xs py-1.5 px-3 bg-amber-50 border-amber-300 text-amber-700 hover:bg-amber-100 disabled:opacity-50"
+            >
+              {autoPricing ? '⏳ Fiyatlanıyor...' : '💲 Fiyatla'}
+            </Button>
+            {(() => {
+              const pricedOrders = orders.filter(o => o.price && o.price > 0)
+              if (pricedOrders.length === 0) return null
+              const avg = pricedOrders.reduce((s, o) => s + (o.price || 0), 0) / pricedOrders.length
+              const isWarning = avg > 32.50
+              // Net Kâr: Gelir (tip + $25 fee) - Gider (canvas_price)
+              const totalRevenue = orders.reduce((s, o) => s + (o.tipAmount || 0) + 25, 0)
+              const totalCost = orders.reduce((s, o) => s + (o.price || 0), 0)
+              const netProfit = totalRevenue - totalCost
+              const perOrder = orders.length > 0 ? netProfit / orders.length : 0
+              return (
+                <>
+                  <span className={`text-[10px] px-2 py-1 rounded-full font-medium ${isWarning ? 'bg-red-100 text-red-700 border border-red-300' : 'bg-emerald-100 text-emerald-700 border border-emerald-300'}`}>
+                    Ort: ${avg.toFixed(2)} | {pricedOrders.length}/{orders.length}
+                  </span>
+                  <span className={`text-[10px] px-2 py-1 rounded-full font-medium ${netProfit >= 0 ? 'bg-green-100 text-green-700 border border-green-300' : 'bg-red-100 text-red-700 border border-red-300'}`}>
+                    Net: ${netProfit.toFixed(0)} (${perOrder.toFixed(1)}/sip)
+                  </span>
+                </>
+              )
+            })()}
             <Button
               onClick={() => {
                 autoMergeApplied.current = false

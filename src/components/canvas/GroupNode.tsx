@@ -352,35 +352,24 @@ function GroupNode({ data }: NodeProps<GroupNodeData>) {
         className="w-5 h-5 !bg-purple-500 !border-2 !border-white"
       />
 
-      {/* Grup Fiyatı */}
+      {/* Grup Fiyatı (readonly - bireysel fiyatların toplamı) */}
       <div className="px-3 py-2 bg-gray-50 border-b border-gray-200">
         <div className="flex items-center justify-between">
           <span className="text-xs font-semibold text-black">Grup Fiyatı:</span>
           <div className="flex items-center gap-2">
             <span className="text-sm text-black">$</span>
-            <input
-              type="number"
-              value={data.groupPrice || ''}
-              onChange={(e) => {
-                const value = parseFloat(e.target.value) || 0
-                if (data.onGroupPriceChange) {
-                  data.onGroupPriceChange(data.groupId, value)
-                }
-              }}
-              placeholder="0.00"
-              className="w-24 text-sm px-2 py-1 border border-gray-300 rounded bg-white text-black focus:outline-none focus:ring-1 focus:ring-purple-500 font-bold"
-              step="0.01"
-              min="0"
-            />
-            {/* Otomatik Toplam Göstergesi */}
-            {calculatedGroupPrice > 0 && (
-              <span
-                className="text-[10px] px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded"
-                title="Tekli fiyatların toplamı"
-              >
-                Σ ${calculatedGroupPrice.toFixed(2)}
-              </span>
-            )}
+            <span
+              className="w-24 text-sm px-2 py-1 border border-gray-200 rounded bg-gray-100 text-black font-bold inline-block"
+              title="Bireysel fiyatların toplamı (otomatik)"
+            >
+              {calculatedGroupPrice > 0 ? calculatedGroupPrice.toFixed(2) : (data.groupPrice || 0).toFixed(2)}
+            </span>
+            <span
+              className="text-[10px] px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded"
+              title="Bireysel fiyatların toplamı"
+            >
+              Σ otomatik
+            </span>
             {/* Açılır panel butonu */}
             {hasGroupPriceDetails && (
               <button
