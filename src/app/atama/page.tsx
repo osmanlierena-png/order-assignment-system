@@ -1060,6 +1060,16 @@ export default function AtamaPage() {
                   <span className={`text-[10px] px-2 py-1 rounded-full font-medium ${netProfit >= 0 ? 'bg-green-100 text-green-700 border border-green-300' : 'bg-red-100 text-red-700 border border-red-300'}`}>
                     Net: ${netProfit.toFixed(0)} (${perOrder.toFixed(1)}/sip)
                   </span>
+                  {(() => {
+                    const ordersWithTip = orders.filter(o => o.tipAmount != null && o.tipAmount > 0)
+                    if (ordersWithTip.length === 0) return null
+                    const avgTip = ordersWithTip.reduce((s, o) => s + (o.tipAmount || 0), 0) / ordersWithTip.length
+                    return (
+                      <span className="text-[10px] px-2 py-1 rounded-full font-medium bg-amber-100 text-amber-700 border border-amber-300">
+                        Ort Tip: ${avgTip.toFixed(2)} ({ordersWithTip.length}/{orders.length})
+                      </span>
+                    )
+                  })()}
                 </>
               )
             })()}
