@@ -890,41 +890,22 @@ function AssignmentCanvasInner({
       // REDDEDİLEN siparişleri toplama dahil etme
       if (order.driverResponse === 'REJECTED') return
 
+      // Her sipariş kendi bireysel fiyatıyla toplanır
+      const payment = order.price || 0
+      totalPayment += payment
+      orderCount++
+
       if (order.groupId) {
-        // Grup zaten işlendiyse atla
-        if (processedGroupIds.has(order.groupId)) return
-        processedGroupIds.add(order.groupId)
-
-        // Gruptaki siparişleri kontrol et (reddedilmemiş olanlar)
-        const groupOrders = orders.filter(o => o.groupId === order.groupId && o.driverResponse !== 'REJECTED')
-
-        // Tüm grup reddedildiyse atla
-        if (groupOrders.length === 0) return
-
-        const isGroupAssigned = groupOrders.some(o => !!o.driver)
-
-        // Grup fiyatı: groupPrice veya ilk siparişin price'ı
-        const groupPayment = groupOrders[0]?.groupPrice || groupOrders[0]?.price || 0
-
-        totalPayment += groupPayment
-        groupCount++
-
-        if (isGroupAssigned) {
-          assignedPayment += groupPayment
-        } else {
-          pendingPayment += groupPayment
+        if (!processedGroupIds.has(order.groupId)) {
+          processedGroupIds.add(order.groupId)
+          groupCount++
         }
+      }
+
+      if (order.driver) {
+        assignedPayment += payment
       } else {
-        // Tekil sipariş
-        const payment = order.price || 0
-        totalPayment += payment
-        orderCount++
-
-        if (order.driver) {
-          assignedPayment += payment
-        } else {
-          pendingPayment += payment
-        }
+        pendingPayment += payment
       }
     })
 
