@@ -114,7 +114,19 @@ export function calculateOrderPrice(
     }
   }
 
-  // Rule 2: Far region internal delivery → discounted
+  // Rule 2: DC içi kısa mesafe + düşük değer → $25
+  if (pickupZip && dropoffZip && pickupZip.startsWith('200') && dropoffZip.startsWith('200') &&
+      drivingDist !== null && drivingDist < 3 && priceAmount < 300) {
+    return {
+      price: 25,
+      reason: `DC içi kısa mesafe (${drivingDist.toFixed(1)} mi) + düşük değer ($${priceAmount.toFixed(0)})`,
+      distanceMiles,
+      distanceSource: distanceMiles !== null ? 'zip' : 'fallback',
+      priceAmount
+    }
+  }
+
+  // Rule 3: Far region internal delivery → discounted
   if (isFarRegionInternal(pickupZip, dropoffZip)) {
     const price = priceAmount < 150 ? 25 : 30
     return {
