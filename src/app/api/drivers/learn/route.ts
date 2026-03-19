@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { learnFromAssignment } from '@/lib/driver-profiles'
+import { learnFromAssignment, learnFromRejection } from '@/lib/driver-profiles'
 
-// POST: Bir atamadan öğren — sürücü profilini canlı güncelle
+// POST: Bir atamadan veya redden öğren — sürücü profilini canlı güncelle
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { driverName, pickupAddress, dropoffAddress, date, timeSlot } = body
+    const { driverName, pickupAddress, dropoffAddress, date, timeSlot, rejected } = body
 
     if (!driverName || !pickupAddress) {
       return NextResponse.json(
@@ -22,16 +22,40 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    const actualDate = date || new Date().toISOString().split('T')[0]
+    const actualTimeSlot = timeSlot || 'oglen'
+
+    if (rejected) {
+      // Red'den öğren — negatif sinyal
+      const profile = await learnFromRejection(
+        driverName,
+        pickupAddress,
+        dropoffAddress || '',
+        actualDate,
+        actualTimeSlot
+      )
+
+      return NextResponse.json({
+        success: true,
+        type: 'rejection',
+        driverName: profile.name,
+        rejectionCount: profile.rejections?.length || 0,
+        totalOrders: profile.stats.totalOrders
+      })
+    }
+
+    // Normal atamadan öğren
     const profile = await learnFromAssignment(
       driverName,
       pickupAddress,
       dropoffAddress || '',
-      date || new Date().toISOString().split('T')[0],
-      timeSlot || 'oglen'
+      actualDate,
+      actualTimeSlot
     )
 
     return NextResponse.json({
       success: true,
+      type: 'assignment',
       driverName: profile.name,
       locationCount: profile.locations.length,
       totalOrders: profile.stats.totalOrders

@@ -36,9 +36,19 @@ export interface DriverStats {
   acceptRate: number // -1 if unknown
 }
 
+export interface DriverRejection {
+  address: string
+  normalized: string
+  lat: number
+  lng: number
+  count: number
+  lastDate: string
+}
+
 export interface DriverProfileData {
   name: string
   locations: DriverLocation[]
+  rejections?: DriverRejection[] // Reddedilen lokasyonlar
   stats: DriverStats
   updatedAt: string
 }
@@ -188,6 +198,57 @@ export async function learnFromAssignment(
   // Kaydet
   await saveDriverProfile(profile)
 
+  return profile
+}
+
+// Red'den öğren — sürücünün istemediği lokasyonu kaydet
+export async function learnFromRejection(
+  driverName: string,
+  pickupAddress: string,
+  dropoffAddress: string,
+  date: string,
+  timeSlot: string
+): Promise<DriverProfileData> {
+  let profile = await getDriverProfile(driverName)
+  if (!profile) {
+    profile = {
+      name: driverName,
+      locations: [],
+      rejections: [],
+      stats: {
+        totalOrders: 0, totalDays: 0, ordersPerDay: 0,
+        grouped: 0, solo: 0, groupRate: 0,
+        dayAvailability: {}, bestDays: [], timeSlots: { sabah: 0, oglen: 0, aksam: 0 },
+        acceptRate: -1
+      },
+      updatedAt: new Date().toISOString()
+    }
+  }
+
+  if (!profile.rejections) profile.rejections = []
+
+  // Pickup adresini rejection olarak kaydet
+  const geo = await geocodeAddress(pickupAddress)
+  if (geo) {
+    const normalized = normalizeAddress(pickupAddress)
+    const existing = profile.rejections.find(r => r.normalized === normalized)
+    if (existing) {
+      existing.count++
+      existing.lastDate = date
+    } else {
+      profile.rejections.push({
+        address: pickupAddress,
+        normalized,
+        lat: geo.lat,
+        lng: geo.lng,
+        count: 1,
+        lastDate: date
+      })
+    }
+  }
+
+  profile.updatedAt = new Date().toISOString()
+  await saveDriverProfile(profile)
   return profile
 }
 
@@ -522,8 +583,21 @@ export function recommendDrivers(
     }
     performanceScore = Math.min(15, performanceScore)
 
+    // ===== RED CEZASI (3+ redden sonra etkili) =====
+    let rejectionPenalty = 0
+    if (profile.rejections && profile.rejections.length > 0) {
+      for (const rej of profile.rejections) {
+        if (rej.count >= 3) { // 3+ kez reddetmişse
+          const dist = haversineDistance(pickupCoord.lat, pickupCoord.lng, rej.lat, rej.lng)
+          if (dist <= 3) rejectionPenalty += Math.min(15, rej.count * 3)
+          else if (dist <= 8) rejectionPenalty += Math.min(8, rej.count * 2)
+        }
+      }
+      rejectionPenalty = Math.min(20, rejectionPenalty)
+    }
+
     // ===== TOPLAM =====
-    const totalScore = Math.round(locationScore + dayScore + capacityScore + performanceScore)
+    const totalScore = Math.round(locationScore + dayScore + capacityScore + performanceScore - rejectionPenalty)
 
     if (totalScore >= 10) {
       // Top bölgeler hesapla
