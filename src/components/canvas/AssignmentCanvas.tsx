@@ -135,8 +135,10 @@ function AssignmentCanvasInner({
   const [addDriverError, setAddDriverError] = useState<string | null>(null)
 
   // Sürücü önerilerini fetch et (ref kullanarak sonsuz döngüyü önle)
-  const fetchRecommendations = useCallback(async (pickupZip: string, timeSlot?: string, dropoffZip?: string): Promise<DriverRecommendation[]> => {
-    const cacheKey = `${pickupZip}-${timeSlot || 'all'}-${dropoffZip || ''}`
+  const fetchRecommendations = useCallback(async (pickupAddress: string, timeSlot?: string, dropoffAddress?: string): Promise<DriverRecommendation[]> => {
+    // Kısa hash oluştur (adres çok uzun olabilir)
+    const shortKey = pickupAddress.substring(0, 60).replace(/[^a-zA-Z0-9]/g, '')
+    const cacheKey = `${shortKey}-${timeSlot || 'all'}`
 
     // Cache'te varsa hemen döndür
     if (recommendationsCacheRef.current[cacheKey]) {
@@ -152,9 +154,9 @@ function AssignmentCanvasInner({
     pendingRequestsRef.current.add(cacheKey)
 
     try {
-      const params = new URLSearchParams({ pickupZip })
+      const params = new URLSearchParams({ pickupAddress })
       if (timeSlot) params.append('timeSlot', timeSlot)
-      if (dropoffZip) params.append('dropoffZip', dropoffZip)
+      if (dropoffAddress) params.append('dropoffAddress', dropoffAddress)
       // Bugünün gününü ekle
       const dayNames = ['Pazar','Pazartesi','Sali','Carsamba','Persembe','Cuma','Cumartesi']
       params.append('day', dayNames[new Date().getDay()])
@@ -187,12 +189,11 @@ function AssignmentCanvasInner({
   // Siparişler için önerileri yükle (hem tekil hem gruplu siparişler)
   useEffect(() => {
     const loadRecommendations = async () => {
-      const uniqueZips = new Set<string>()
+      const uniqueAddresses = new Set<string>()
 
-      // TÜM siparişlerden ZIP'leri topla (gruplu + grupsuz)
+      // TÜM siparişlerden benzersiz pickup adreslerini topla
       orders.forEach(order => {
-        const zip = extractZipFromAddress(order.pickupAddress)
-        if (zip) uniqueZips.add(zip)
+        if (order.pickupAddress) uniqueAddresses.add(order.pickupAddress)
       })
 
       // Hash oluştur - siparişler değişmediyse tekrar yükleme
@@ -202,9 +203,10 @@ function AssignmentCanvasInner({
       }
       loadedOrdersHashRef.current = ordersHash
 
-      // Her benzersiz ZIP için önerileri yükle
-      for (const zip of uniqueZips) {
-        await fetchRecommendations(zip)
+      // Tüm benzersiz adresler için önerileri yükle
+      // Geocoding cache sayesinde aynı adres tekrar API çağrısı yapmaz
+      for (const addr of uniqueAddresses) {
+        await fetchRecommendations(addr)
       }
     }
 
@@ -633,9 +635,9 @@ function AssignmentCanvasInner({
       // Grup yüksekliğini hesapla
       const groupHeight = GROUP_BASE_HEIGHT + (groupOrdersList.length * GROUP_ORDER_HEIGHT)
 
-      // Grup için önerileri al (ilk siparişin ZIP'ini kullan)
-      const groupZip = extractZipFromAddress(groupOrdersList[0].pickupAddress)
-      const groupCacheKey = `${groupZip}-all`
+      // Grup için önerileri al (ilk siparişin adresini kullan)
+      const groupShortKey = (groupOrdersList[0].pickupAddress || '').substring(0, 60).replace(/[^a-zA-Z0-9]/g, '')
+      const groupCacheKey = `${groupShortKey}-all`
       const groupRecommendations = recommendationsCache[groupCacheKey] || []
 
       newNodes.push({
@@ -688,9 +690,9 @@ function AssignmentCanvasInner({
       const x = savedPos?.x ?? getOrderX(order.timeSlot)
       const y = savedPos?.y ?? yTracker[order.timeSlot]
 
-      // Bu sipariş için önerileri al (cache key sadece ZIP bazlı)
-      const orderZip = extractZipFromAddress(order.pickupAddress)
-      const cacheKey = `${orderZip}-all`
+      // Bu sipariş için önerileri al (adres bazlı cache)
+      const shortKey = (order.pickupAddress || '').substring(0, 60).replace(/[^a-zA-Z0-9]/g, '')
+      const cacheKey = `${shortKey}-all`
       const orderRecommendations = recommendationsCache[cacheKey] || []
 
       newNodes.push({

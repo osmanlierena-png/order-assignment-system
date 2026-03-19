@@ -560,6 +560,21 @@ export default function AtamaPage() {
 
       setMessage({ type: 'success', text: `Sipariş ${driverName}'e atandı` })
       setTimeout(() => setMessage(null), 3000)
+
+      // Canlı öğrenme: sürücü profilini güncelle
+      if (currentOrder) {
+        fetch('/api/drivers/learn', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            driverName,
+            pickupAddress: currentOrder.pickupAddress,
+            dropoffAddress: currentOrder.dropoffAddress,
+            date: selectedDate,
+            timeSlot: currentOrder.timeSlot || 'oglen'
+          })
+        }).catch(() => {}) // fire-and-forget
+      }
     } catch (error) {
       setMessage({ type: 'error', text: 'Atama başarısız oldu' })
     }

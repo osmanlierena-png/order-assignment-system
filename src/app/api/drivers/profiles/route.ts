@@ -1,52 +1,27 @@
 import { NextRequest, NextResponse } from 'next/server'
 import {
-  buildDriverProfiles,
-  getDriverProfiles,
+  rebuildAllProfiles,
+  getAllDriverProfiles,
   getProfilesLastUpdated,
-  recommendDrivers,
-  getRegionFromZip
 } from '@/lib/driver-profiles'
 
-// GET: Profilleri getir veya öneri al
-export async function GET(request: NextRequest) {
+// GET: Tüm profilleri getir
+export async function GET() {
   try {
-    const { searchParams } = new URL(request.url)
-    const action = searchParams.get('action') || 'list'
-
-    if (action === 'recommend') {
-      // Öneri modu
-      const pickupZip = searchParams.get('pickupZip')
-      const dropoffZip = searchParams.get('dropoffZip')
-      const dayOfWeek = searchParams.get('day') || getCurrentDayName()
-      const timeSlot = searchParams.get('timeSlot') || 'oglen'
-      const limit = parseInt(searchParams.get('limit') || '8')
-
-      if (!pickupZip) {
-        return NextResponse.json({ error: 'pickupZip gerekli' }, { status: 400 })
-      }
-
-      const profiles = await getDriverProfiles()
-      const recommendations = recommendDrivers(
-        profiles, pickupZip, dropoffZip, dayOfWeek, timeSlot, limit
-      )
-
-      return NextResponse.json({
-        success: true,
-        pickupZip,
-        pickupRegion: getRegionFromZip(pickupZip),
-        dayOfWeek,
-        timeSlot,
-        recommendations,
-        totalDrivers: profiles.size
-      })
-    }
-
-    // List modu - tüm profilleri getir
-    const profiles = await getDriverProfiles()
+    const profiles = await getAllDriverProfiles()
     const lastUpdated = await getProfilesLastUpdated()
 
     const profileList = Array.from(profiles.values())
-      .sort((a, b) => b.totalOrders - a.totalOrders)
+      .sort((a, b) => b.stats.totalOrders - a.stats.totalOrders)
+      .map(p => ({
+        name: p.name,
+        totalOrders: p.stats.totalOrders,
+        ordersPerDay: p.stats.ordersPerDay,
+        locationCount: p.locations.length,
+        bestDays: p.stats.bestDays,
+        groupRate: p.stats.groupRate,
+        updatedAt: p.updatedAt
+      }))
 
     return NextResponse.json({
       success: true,
@@ -54,33 +29,30 @@ export async function GET(request: NextRequest) {
       totalDrivers: profileList.length,
       lastUpdated
     })
-
   } catch (error) {
-    console.error('Driver profiles API error:', error)
+    console.error('Driver profiles GET error:', error)
     return NextResponse.json({ error: 'Profiller yüklenemedi' }, { status: 500 })
   }
 }
 
-// POST: Profilleri yeniden hesapla
+// POST: Profilleri geçmiş veriden yeniden oluştur (geocoding ile)
 export async function POST() {
   try {
     const startTime = Date.now()
-    const profiles = await buildDriverProfiles()
+    const count = await rebuildAllProfiles()
     const duration = Date.now() - startTime
 
     return NextResponse.json({
       success: true,
-      message: `${profiles.size} sürücü profili güncellendi`,
-      totalDrivers: profiles.size,
+      message: `${count} sürücü profili yeniden oluşturuldu (geocoding ile)`,
+      totalDrivers: count,
       durationMs: duration
     })
   } catch (error) {
     console.error('Profile rebuild error:', error)
-    return NextResponse.json({ error: 'Profiller güncellenemedi' }, { status: 500 })
+    return NextResponse.json(
+      { error: 'Profil rebuild başarısız: ' + (error as Error).message },
+      { status: 500 }
+    )
   }
-}
-
-function getCurrentDayName(): string {
-  const day = new Date().getDay()
-  return ['Pazar','Pazartesi','Sali','Carsamba','Persembe','Cuma','Cumartesi'][day]
 }

@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 
 // Korumasız sayfalar
-const publicPaths = ['/login', '/api/auth', '/api/base44', '/api/drivers/recommendations']
+const publicPaths = ['/login', '/api/auth', '/api/base44', '/api/drivers/recommendations', '/api/drivers/profiles', '/api/drivers/learn']
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl

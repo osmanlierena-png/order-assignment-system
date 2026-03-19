@@ -1,69 +1,82 @@
 import { NextRequest, NextResponse } from 'next/server'
 import {
-  getDriverProfiles,
+  getAllDriverProfiles,
   recommendDrivers,
-  getRegionFromZip
 } from '@/lib/driver-profiles'
+import { geocodeAddress } from '@/lib/geocoding'
 
-// V2: Profil tabanlı öneri sistemi
+// V3: Adres bazlı + canlı öğrenme destekli öneri sistemi
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
-    const pickupZip = searchParams.get('pickupZip')
-    const dropoffZip = searchParams.get('dropoffZip') || null
+    const pickupAddress = searchParams.get('pickupAddress') || ''
+    const dropoffAddress = searchParams.get('dropoffAddress') || ''
+    const pickupZip = searchParams.get('pickupZip') || '' // eski uyumluluk
     const timeSlot = searchParams.get('timeSlot') || 'oglen'
-    const limit = parseInt(searchParams.get('limit') || '8')
-
-    // Gün hesapla — query'den veya bugünden
+    const limit = Math.min(Math.max(parseInt(searchParams.get('limit') || '8') || 8, 1), 20)
     const dayParam = searchParams.get('day')
     const dayOfWeek = dayParam || getCurrentDayName()
 
-    if (!pickupZip) {
+    // Adres veya ZIP'ten çalışabilir
+    const addressToGeocode = pickupAddress || pickupZip
+    if (!addressToGeocode) {
       return NextResponse.json(
-        { error: 'pickupZip parametresi gerekli' },
+        { error: 'pickupAddress veya pickupZip gerekli' },
         { status: 400 }
       )
     }
 
-    const profiles = await getDriverProfiles()
-    const recommendations = recommendDrivers(
-      profiles, pickupZip, dropoffZip, dayOfWeek, timeSlot, limit
-    )
+    // Geocode pickup
+    const pickupGeo = await geocodeAddress(addressToGeocode)
+    if (!pickupGeo) {
+      return NextResponse.json(
+        { error: 'Pickup adresi geocode edilemedi' },
+        { status: 400 }
+      )
+    }
 
-    // Eski format uyumluluğu için dönüştür
-    const compatRecommendations = recommendations.map(r => ({
-      driverName: r.driverName,
-      score: r.score,
-      regionExperience: r.regionScore,
-      acceptRate: r.profile.acceptRate,
-      reasons: r.reasons,
-      // V2 ek bilgiler
-      regionScore: r.regionScore,
-      dayScore: r.dayScore,
-      capacityScore: r.capacityScore,
-      performanceScore: r.performanceScore,
-      profile: {
-        totalOrders: r.profile.totalOrders,
-        ordersPerDay: r.profile.ordersPerDay,
-        topRegions: r.profile.topRegions,
-        bestDays: r.profile.bestDays,
-        groupRate: r.profile.groupRate
-      }
-    }))
+    // Geocode dropoff (opsiyonel)
+    let dropoffGeo = null
+    if (dropoffAddress) {
+      dropoffGeo = await geocodeAddress(dropoffAddress)
+    }
+
+    // Profilleri al
+    const profiles = await getAllDriverProfiles()
+
+    if (profiles.size === 0) {
+      return NextResponse.json({
+        success: true,
+        recommendations: [],
+        message: 'Profiller henüz oluşturulmamış. POST /api/drivers/profiles çağrısı yapın.',
+        totalDriversAnalyzed: 0
+      })
+    }
+
+    // Öneriler
+    const recommendations = recommendDrivers(
+      profiles,
+      pickupGeo,
+      dropoffGeo,
+      addressToGeocode,
+      dropoffAddress || null,
+      dayOfWeek,
+      timeSlot,
+      limit
+    )
 
     return NextResponse.json({
       success: true,
-      pickupZip,
-      pickupRegion: getRegionFromZip(pickupZip),
+      pickupAddress: addressToGeocode,
       dayOfWeek,
       timeSlot,
-      recommendations: compatRecommendations,
+      recommendations,
       totalDriversAnalyzed: profiles.size
     })
   } catch (error) {
     console.error('Recommendations API error:', error)
     return NextResponse.json(
-      { error: 'Öneriler hesaplanamadı' },
+      { error: 'Öneriler hesaplanamadı: ' + (error as Error).message },
       { status: 500 }
     )
   }
@@ -71,5 +84,5 @@ export async function GET(request: NextRequest) {
 
 function getCurrentDayName(): string {
   const day = new Date().getDay()
-  return ['Pazar','Pazartesi','Sali','Carsamba','Persembe','Cuma','Cumartesi'][day]
+  return ['Pazar', 'Pazartesi', 'Sali', 'Carsamba', 'Persembe', 'Cuma', 'Cumartesi'][day]
 }
