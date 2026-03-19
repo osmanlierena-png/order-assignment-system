@@ -290,9 +290,9 @@ function addOrUpdateLocation(
 
 // ========== PROFİL REBUILD (geçmiş veriden toplu oluşturma) ==========
 
-export async function rebuildAllProfiles(): Promise<number> {
+export async function rebuildAllProfiles(offset: number = 0, batchSize: number = 5): Promise<{ processed: number; total: number; done: boolean }> {
   const dates = await getAvailableDates()
-  if (!dates || dates.length === 0) return 0
+  if (!dates || dates.length === 0) return { processed: 0, total: 0, done: true }
 
   dates.sort()
 
@@ -372,10 +372,15 @@ export async function rebuildAllProfiles(): Promise<number> {
     }
   }
 
-  // Her sürücü için profil oluştur (geocoding ile)
+  // Her sürücü için profil oluştur (geocoding ile) — batch destekli
   let profileCount = 0
+  const driverNames = Object.keys(driverRawData).sort()
+  const totalDrivers = driverNames.length
+  const batchDrivers = driverNames.slice(offset, offset + batchSize)
 
-  for (const [name, d] of Object.entries(driverRawData)) {
+  for (const name of batchDrivers) {
+    const d = driverRawData[name]
+    if (!d) continue
     // Tüm benzersiz adresleri topla
     const allAddresses = new Map<string, { address: string; count: number; date: string; type: 'pickup' | 'dropoff' | 'both' }>()
 
@@ -452,7 +457,8 @@ export async function rebuildAllProfiles(): Promise<number> {
   }
 
   await redis.set(PROFILES_UPDATED_KEY, new Date().toISOString())
-  return profileCount
+  const done = offset + batchSize >= totalDrivers
+  return { processed: profileCount, total: totalDrivers, done }
 }
 
 // ========== ÖNERİ MOTORU V3 ==========

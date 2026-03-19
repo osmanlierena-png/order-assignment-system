@@ -35,17 +35,28 @@ export async function GET() {
   }
 }
 
-// POST: Profilleri geçmiş veriden yeniden oluştur (geocoding ile)
-export async function POST() {
+// POST: Profilleri batch halinde rebuild et
+// Query params: ?offset=0&batch=5 (varsayılan: offset=0, batch=5)
+// Vercel 60s timeout'u aşmamak için parçalı çalışır
+export async function POST(request: NextRequest) {
   try {
+    const { searchParams } = new URL(request.url)
+    const offset = parseInt(searchParams.get('offset') || '0')
+    const batch = parseInt(searchParams.get('batch') || '5')
+
     const startTime = Date.now()
-    const count = await rebuildAllProfiles()
+    const result = await rebuildAllProfiles(offset, batch)
     const duration = Date.now() - startTime
 
     return NextResponse.json({
       success: true,
-      message: `${count} sürücü profili yeniden oluşturuldu (geocoding ile)`,
-      totalDrivers: count,
+      message: result.done
+        ? `Tamamlandı! ${result.processed} sürücü işlendi (toplam ${result.total})`
+        : `Batch ${offset}-${offset + batch}: ${result.processed} sürücü işlendi. Devam için offset=${offset + batch} kullanın.`,
+      processed: result.processed,
+      total: result.total,
+      done: result.done,
+      nextOffset: result.done ? null : offset + batch,
       durationMs: duration
     })
   } catch (error) {
