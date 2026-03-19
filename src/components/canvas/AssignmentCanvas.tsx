@@ -135,8 +135,8 @@ function AssignmentCanvasInner({
   const [addDriverError, setAddDriverError] = useState<string | null>(null)
 
   // Sürücü önerilerini fetch et (ref kullanarak sonsuz döngüyü önle)
-  const fetchRecommendations = useCallback(async (pickupZip: string, timeSlot?: string): Promise<DriverRecommendation[]> => {
-    const cacheKey = `${pickupZip}-${timeSlot || 'all'}`
+  const fetchRecommendations = useCallback(async (pickupZip: string, timeSlot?: string, dropoffZip?: string): Promise<DriverRecommendation[]> => {
+    const cacheKey = `${pickupZip}-${timeSlot || 'all'}-${dropoffZip || ''}`
 
     // Cache'te varsa hemen döndür
     if (recommendationsCacheRef.current[cacheKey]) {
@@ -154,6 +154,10 @@ function AssignmentCanvasInner({
     try {
       const params = new URLSearchParams({ pickupZip })
       if (timeSlot) params.append('timeSlot', timeSlot)
+      if (dropoffZip) params.append('dropoffZip', dropoffZip)
+      // Bugünün gününü ekle
+      const dayNames = ['Pazar','Pazartesi','Sali','Carsamba','Persembe','Cuma','Cumartesi']
+      params.append('day', dayNames[new Date().getDay()])
 
       const response = await fetch(`/api/drivers/recommendations?${params}`)
       if (!response.ok) {

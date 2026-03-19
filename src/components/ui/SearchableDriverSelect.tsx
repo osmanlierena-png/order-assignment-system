@@ -8,12 +8,26 @@ interface Driver {
   phone: string | null
 }
 
+interface DriverProfileSummary {
+  totalOrders: number
+  ordersPerDay: number
+  topRegions: string[]
+  bestDays: string[]
+  groupRate: number
+}
+
 interface DriverRecommendation {
   driverName: string
   score: number
   regionExperience: number
   acceptRate: number
   reasons: string[]
+  // V2 fields
+  regionScore?: number
+  dayScore?: number
+  capacityScore?: number
+  performanceScore?: number
+  profile?: DriverProfileSummary
 }
 
 interface Props {
@@ -36,23 +50,18 @@ export default function SearchableDriverSelect({
   const containerRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
-  // Önerilen sürücü isimleri seti
   const recommendedNames = useMemo(() => {
     return new Set(recommendations.map(r => r.driverName))
   }, [recommendations])
 
-  // Öneri bilgisi map'i
   const recommendationMap = useMemo(() => {
     const map = new Map<string, DriverRecommendation>()
     recommendations.forEach(r => map.set(r.driverName, r))
     return map
   }, [recommendations])
 
-  // Filtrelenmiş sürücüler
   const filteredDrivers = useMemo(() => {
-    if (!drivers || drivers.length === 0) {
-      return []
-    }
+    if (!drivers || drivers.length === 0) return []
     if (!search.trim()) return drivers
     const searchLower = search.toLowerCase()
     return drivers.filter(d =>
@@ -61,7 +70,6 @@ export default function SearchableDriverSelect({
     )
   }, [drivers, search, recommendations])
 
-  // Dışarı tıklama
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
@@ -69,12 +77,10 @@ export default function SearchableDriverSelect({
         setSearch('')
       }
     }
-
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
-  // Açıldığında input'a focus
   useEffect(() => {
     if (isOpen && inputRef.current) {
       inputRef.current.focus()
@@ -93,6 +99,24 @@ export default function SearchableDriverSelect({
     setSearch('')
   }
 
+  // Skor rengi
+  const getScoreColor = (score: number) => {
+    if (score >= 60) return 'bg-green-600'
+    if (score >= 40) return 'bg-amber-500'
+    return 'bg-gray-500'
+  }
+
+  // Kısa bölge adı
+  const shortRegion = (r: string) => {
+    const map: Record<string, string> = {
+      'DC': 'DC', 'NoVA': 'VA', 'Bethesda': 'Beth', 'Gaithersburg': 'Gburg',
+      'Silver Spring': 'SS', 'Frederick': 'Fred', 'Fredericksburg': 'Fburg',
+      'Woodbridge': 'Wood', 'Manassas': 'Man', 'Loudoun': 'Lou',
+      'Bowie/PG': 'PG', 'So MD': 'SMD', 'MD-Other': 'MD'
+    }
+    return map[r] || r.substring(0, 4)
+  }
+
   return (
     <div
       ref={containerRef}
@@ -102,7 +126,6 @@ export default function SearchableDriverSelect({
       onPointerDown={(e) => e.stopPropagation()}
       onTouchStart={(e) => e.stopPropagation()}
     >
-      {/* Seçili Sürücü veya Buton */}
       <button
         type="button"
         onClick={(e) => {
@@ -126,32 +149,22 @@ export default function SearchableDriverSelect({
         </span>
         <div className="flex items-center gap-1">
           {selectedDriver && (
-            <span
-              onClick={handleClear}
-              className="text-red-500 hover:text-red-700 px-1"
-              title="Temizle"
-            >
+            <span onClick={handleClear} className="text-red-500 hover:text-red-700 px-1" title="Temizle">
               ×
             </span>
           )}
-          <svg
-            className={`w-4 h-4 transition-transform ${isOpen ? 'rotate-180' : ''}`}
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
+          <svg className={`w-4 h-4 transition-transform ${isOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
           </svg>
         </div>
       </button>
 
-      {/* Dropdown */}
       {isOpen && (
         <div
-          className="absolute w-full mt-1 bg-white border-2 border-purple-300 rounded-lg shadow-xl"
+          className="absolute w-72 mt-1 bg-white border-2 border-purple-300 rounded-lg shadow-xl"
           style={{ zIndex: 9999 }}
         >
-          {/* Arama Input */}
+          {/* Arama */}
           <div className="p-2 border-b border-gray-200">
             <input
               ref={inputRef}
@@ -165,8 +178,8 @@ export default function SearchableDriverSelect({
             />
           </div>
 
-          {/* Sürücü Listesi */}
-          <div className="max-h-60 overflow-y-auto overscroll-contain">
+          {/* Liste */}
+          <div className="max-h-72 overflow-y-auto overscroll-contain">
             {filteredDrivers.length === 0 ? (
               <div className="px-3 py-2 text-xs text-gray-500 text-center">
                 Sürücü bulunamadı
@@ -176,31 +189,64 @@ export default function SearchableDriverSelect({
                 {/* Önerilen Sürücüler */}
                 {recommendations.length > 0 && !search && (
                   <>
-                    <div className="px-3 py-1.5 bg-red-50 border-b border-red-200 text-[10px] font-bold text-red-700 uppercase">
-                      🎯 Önerilen Sürücüler
+                    <div className="px-3 py-1.5 bg-emerald-50 border-b border-emerald-200 text-[10px] font-bold text-emerald-800 uppercase flex items-center gap-1">
+                      <span>🎯</span> Önerilen Sürücüler
                     </div>
                     {recommendations.map((rec) => {
                       const driver = drivers.find(d => d.name === rec.driverName)
                       if (!driver) return null
+                      const profile = rec.profile
                       return (
                         <button
                           key={`rec-${driver.id}`}
                           type="button"
                           onClick={() => handleSelect(driver)}
                           className={`
-                            w-full px-3 py-2 text-left text-xs border-l-4 border-red-500
-                            ${selectedDriver === driver.name ? 'bg-red-200' : 'bg-red-50 hover:bg-red-100'}
+                            w-full px-3 py-2 text-left text-xs border-l-4 border-emerald-500
+                            ${selectedDriver === driver.name ? 'bg-emerald-200' : 'bg-emerald-50 hover:bg-emerald-100'}
                           `}
                         >
+                          {/* Üst satır: İsim + Skor */}
                           <div className="flex items-center justify-between">
                             <span className="font-bold text-black">{driver.name}</span>
-                            <span className="text-[10px] bg-red-500 text-white px-2 py-0.5 rounded-full font-bold">
+                            <span className={`text-[10px] ${getScoreColor(rec.score)} text-white px-2 py-0.5 rounded-full font-bold`}>
                               {rec.score}p
                             </span>
                           </div>
+
+                          {/* Profil bilgisi */}
+                          {profile && (
+                            <div className="flex items-center gap-2 mt-1 flex-wrap">
+                              {/* Bölgeler */}
+                              <span className="text-[9px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded">
+                                {profile.topRegions.map(shortRegion).join(', ')}
+                              </span>
+                              {/* Sipariş/gün */}
+                              <span className="text-[9px] bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded">
+                                {profile.ordersPerDay}/gün
+                              </span>
+                              {/* En iyi günler */}
+                              {profile.bestDays.length > 0 && (
+                                <span className="text-[9px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded">
+                                  {profile.bestDays.slice(0, 2).map(d => d.substring(0, 3)).join(', ')}
+                                </span>
+                              )}
+                            </div>
+                          )}
+
+                          {/* Skor detayı */}
+                          {rec.regionScore !== undefined && (
+                            <div className="flex items-center gap-1 mt-1">
+                              <span className="text-[9px] text-gray-500">
+                                B:{rec.regionScore} G:{rec.dayScore} K:{rec.capacityScore} P:{rec.performanceScore}
+                              </span>
+                            </div>
+                          )}
+
+                          {/* Sebepler */}
                           {rec.reasons.length > 0 && (
-                            <div className="text-[10px] text-red-700 mt-0.5">
-                              {rec.reasons[0]}
+                            <div className="text-[10px] text-emerald-700 mt-0.5">
+                              {rec.reasons.slice(0, 2).join(' · ')}
                             </div>
                           )}
                         </button>
@@ -229,7 +275,7 @@ export default function SearchableDriverSelect({
                         className={`
                           w-full px-3 py-2 text-left text-xs flex items-center justify-between
                           ${isRecommended && search
-                            ? 'bg-red-50 border-l-4 border-red-500 hover:bg-red-100'
+                            ? 'bg-emerald-50 border-l-4 border-emerald-500 hover:bg-emerald-100'
                             : selectedDriver === driver.name
                             ? 'bg-green-50 text-black'
                             : 'hover:bg-purple-50 text-black'
@@ -239,14 +285,14 @@ export default function SearchableDriverSelect({
                         <div>
                           <span className="font-medium">{driver.name}</span>
                           {isRecommended && search && rec && (
-                            <span className="ml-2 text-[10px] text-red-600">
+                            <span className="ml-2 text-[10px] text-emerald-600">
                               ({rec.reasons[0]})
                             </span>
                           )}
                         </div>
                         <div className="flex items-center gap-2">
                           {isRecommended && search && rec && (
-                            <span className="text-[10px] bg-red-500 text-white px-1.5 py-0.5 rounded">
+                            <span className={`text-[10px] ${getScoreColor(rec.score)} text-white px-1.5 py-0.5 rounded`}>
                               {rec.score}p
                             </span>
                           )}
@@ -261,9 +307,12 @@ export default function SearchableDriverSelect({
             )}
           </div>
 
-          {/* Sürücü Sayısı */}
-          <div className="px-3 py-1.5 bg-gray-50 border-t border-gray-200 text-[10px] text-gray-500">
-            {filteredDrivers.length} / {drivers.length} sürücü
+          {/* Alt bilgi */}
+          <div className="px-3 py-1.5 bg-gray-50 border-t border-gray-200 text-[10px] text-gray-500 flex justify-between">
+            <span>{filteredDrivers.length} / {drivers.length} sürücü</span>
+            {recommendations.length > 0 && (
+              <span className="text-emerald-600 font-medium">{recommendations.length} önerilen</span>
+            )}
           </div>
         </div>
       )}
