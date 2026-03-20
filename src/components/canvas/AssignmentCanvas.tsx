@@ -203,10 +203,11 @@ function AssignmentCanvasInner({
       }
       loadedOrdersHashRef.current = ordersHash
 
-      // Tüm benzersiz adresler için önerileri yükle
-      // Geocoding cache sayesinde aynı adres tekrar API çağrısı yapmaz
-      for (const addr of uniqueAddresses) {
-        await fetchRecommendations(addr)
+      // Paralel yükle — 5'li batch'ler halinde (geocoding cache sayesinde hızlanır)
+      const addrList = Array.from(uniqueAddresses)
+      for (let i = 0; i < addrList.length; i += 5) {
+        const batch = addrList.slice(i, i + 5)
+        await Promise.all(batch.map(addr => fetchRecommendations(addr)))
       }
     }
 
